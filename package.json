@@ -1,0 +1,18 @@
+{
+  "name": "super-ajudante",
+  "version": "1.0.0",
+  "description": "Super Ajudante - gestao de estoque e contas a pagar via NF-e (API Meu Danfe) com Google Sheets como banco",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^4.5.0",
+    "google-auth-library": "^9.14.0",
+    "googleapis": "^144.0.0"
+  },
+  "devDependencies": {
+    "vercel": "^39.0.0"
+  }
+}

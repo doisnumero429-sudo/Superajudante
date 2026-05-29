@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Super Ajudante</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Spline+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<style>
+:root{
+  --bg:#0f1413; --surface:#161d1c; --surface2:#1e2726; --line:#2a3534;
+  --ink:#e8efe9; --muted:#8b9a96; --accent:#48c78e; --accent-d:#2f9d6e;
+  --danger:#ef6f6f; --warn:#e6b450; --info:#5aa9e6;
+  --radius:16px; --shadow:0 8px 30px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Spline Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);
+  font-size:15px;line-height:1.5;padding-bottom:78px}
+h1,h2,h3{font-family:'Fraunces',serif;font-weight:600;letter-spacing:-.02em}
+.app{max-width:560px;margin:0 auto;min-height:100vh}
+header{padding:22px 20px 14px;position:sticky;top:0;background:linear-gradient(180deg,var(--bg) 70%,transparent);z-index:30}
+header .sub{color:var(--muted);font-size:13px}
+header h1{font-size:26px;margin-top:2px;display:flex;align-items:center;gap:8px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
+main{padding:6px 16px 30px}
+.view{display:none;animation:fade .35s ease}
+.view.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:14px;box-shadow:var(--shadow)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.stat .n{font-family:'Fraunces',serif;font-size:30px;font-weight:600;line-height:1}
+.stat .l{color:var(--muted);font-size:12.5px;margin-top:6px}
+.stat.alert{border-color:#5a3838;background:linear-gradient(160deg,#231a1a,var(--surface))}
+.stat.alert .n{color:var(--danger)}
+.stat.warn .n{color:var(--warn)}
+.stat.good .n{color:var(--accent)}
+label{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px}
+input,select,textarea{width:100%;background:var(--surface2);border:1px solid var(--line);color:var(--ink);
+  padding:13px 14px;border-radius:12px;font-size:16px;font-family:inherit;outline:none;transition:border .2s}
+input:focus,select:focus,textarea:focus{border-color:var(--accent)}
+input::placeholder{color:#5d6b67}
+button{cursor:pointer;font-family:inherit;border:none;font-size:15px;font-weight:600;border-radius:12px;transition:transform .1s,opacity .2s}
+button:active{transform:scale(.97)}
+.btn{background:var(--accent);color:#06120c;padding:15px;width:100%;margin-top:18px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-2{background:var(--surface2);color:var(--ink);border:1px solid var(--line)}
+.btn-sm{padding:9px 14px;font-size:13px;width:auto}
+.chave-input{font-size:15px;letter-spacing:.5px;font-variant-numeric:tabular-nums}
+.status-box{margin-top:16px;padding:16px;border-radius:12px;border:1px solid var(--line);background:var(--surface2);display:none}
+.status-box.show{display:block;animation:fade .3s}
+.status-row{display:flex;align-items:center;gap:10px;font-weight:600}
+.spinner{width:18px;height:18px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600}
+.b-ok{background:#12321f;color:var(--accent)} .b-err{background:#3a1d1d;color:var(--danger)}
+.b-wait{background:#322a12;color:var(--warn)} .b-info{background:#13283a;color:var(--info)}
+.b-new{background:#322412;color:var(--warn)}
+.item{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;background:var(--surface2)}
+.item .top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.item .desc{font-size:13.5px;font-weight:500}
+.item .meta{color:var(--muted);font-size:12px;margin-top:4px}
+.item .calc{display:flex;gap:16px;margin-top:10px;flex-wrap:wrap;font-size:12.5px}
+.item .calc b{font-family:'Fraunces',serif;font-size:15px;color:var(--ink);display:block}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.list-row{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)}
+.list-row:last-child{border-bottom:none}
+.list-row .t{font-weight:500;font-size:14px}
+.list-row .s{color:var(--muted);font-size:12px;margin-top:2px}
+.list-row .v{text-align:right;font-family:'Fraunces',serif;font-weight:600}
+.muted{color:var(--muted)} .small{font-size:12.5px}
+.alertbar{background:#3a1d1d;border:1px solid #5a3838;color:#f0b4b4;padding:12px;border-radius:12px;font-size:13px;margin-bottom:14px}
+.empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px}
+.sec-title{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:22px 0 10px;font-weight:600}
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--line);display:flex;z-index:40;padding:8px 4px env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;color:var(--muted);padding:8px 2px;font-size:10.5px;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:4px}
+nav button.active{color:var(--accent)}
+nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
+#scanner{border-radius:12px;overflow:hidden;margin-top:14px;display:none}
+#scanner.show{display:block}
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--line);
+  color:var(--ink);padding:13px 20px;border-radius:12px;font-size:14px;z-index:100;box-shadow:var(--shadow);opacity:0;transition:opacity .3s;max-width:90%;text-align:center}
+.toast.show{opacity:1}
+.toast.err{border-color:#5a3838;color:#f0b4b4}
+.toast.ok{border-color:var(--accent-d)}
+hr{border:none;border-top:1px solid var(--line);margin:16px 0}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="sub" id="hdr-sub">Painel</div>
+  <h1><span class="dot"></span> <span>Super Ajudante</span></h1>
+</header>
+<main>
+
+<!-- DASHBOARD -->
+<section class="view active" id="v-dash">
+  <div class="grid" id="dash-stats"><div class="empty">Carregando…</div></div>
+  <div class="sec-title">Estoque baixo</div>
+  <div class="card" id="dash-baixo"><div class="muted small">—</div></div>
+  <div class="sec-title">Últimas movimentações</div>
+  <div class="card" id="dash-movs"><div class="muted small">—</div></div>
+  <button class="btn-2" style="width:100%;padding:12px;margin-top:6px" onclick="rodarDiagnostico()">⚙ Testar configuração</button>
+  <div id="diag-result"></div>
+</section>
+
+<!-- IMPORTAR -->
+<section class="view" id="v-import">
+  <div class="card">
+    <h2 style="font-size:19px;margin-bottom:4px">Importar NF-e</h2>
+    <p class="muted small">Cole a chave de acesso de 44 dígitos.</p>
+    <label>Chave de acesso</label>
+    <input class="chave-input" id="chave" inputmode="numeric" maxlength="54" placeholder="0000 0000 0000 … (44 números)">
+    <div class="small muted" id="chave-count" style="margin-top:6px">0 / 44 dígitos</div>
+    <button class="btn" id="btn-buscar" onclick="buscarNfe()">Buscar nota</button>
+    <div class="status-box" id="status-box"></div>
+    <hr>
+    <details>
+      <summary class="muted small" style="cursor:pointer">Já tenho o arquivo XML</summary>
+      <label>Colar conteúdo do XML</label>
+      <textarea id="xml-manual" rows="4" placeholder="<?xml version=..."></textarea>
+      <button class="btn-2" style="width:100%;padding:13px;margin-top:10px" onclick="enviarXmlManual()">Importar deste XML</button>
+    </details>
+  </div>
+</section>
+
+<!-- CONFERÊNCIA -->
+<section class="view" id="v-conf">
+  <div id="conf-content"><div class="empty">Nenhuma nota em conferência.</div></div>
+</section>
+
+<!-- ESTOQUE -->
+<section class="view" id="v-estoque">
+  <div class="row" style="margin-bottom:14px">
+    <button class="btn-2 btn-sm" style="width:100%;padding:12px" onclick="nav('saida')">↓ Saída manual</button>
+    <button class="btn-2 btn-sm" style="width:100%;padding:12px" onclick="nav('inv')">⌗ Inventário</button>
+  </div>
+  <input id="busca-estoque" placeholder="Buscar produto…" oninput="filtrarEstoque()" style="margin-bottom:12px">
+  <div class="card" id="estoque-list"><div class="empty">Carregando…</div></div>
+</section>
+
+<!-- SAÍDA -->
+<section class="view" id="v-saida">
+  <div class="card">
+    <h2 style="font-size:19px">Saída de estoque</h2>
+    <label>Produto</label>
+    <select id="saida-prod"></select>
+    <label>Quantidade</label>
+    <input id="saida-qtd" type="number" inputmode="decimal" placeholder="0">
+    <label>Motivo</label>
+    <select id="saida-motivo">
+      <option>venda</option><option>consumo interno</option><option>perda</option>
+      <option>quebra</option><option>vencimento</option><option>transferência</option>
+      <option>ajuste manual</option><option>outro</option>
+    </select>
+    <label>Observação</label>
+    <input id="saida-obs" placeholder="opcional">
+    <button class="btn" onclick="darSaida()">Registrar saída</button>
+  </div>
+</section>
+
+<!-- INVENTÁRIO -->
+<section class="view" id="v-inv">
+  <div class="card">
+    <h2 style="font-size:19px">Inventário</h2>
+    <p class="muted small">Leia o código de barras ou digite.</p>
+    <button class="btn-2" style="width:100%;padding:13px;margin-top:12px" onclick="toggleScanner()">📷 Ler código de barras</button>
+    <div id="scanner"></div>
+    <label>Código de barras</label>
+    <input id="inv-ean" inputmode="numeric" placeholder="código" onchange="buscarPorEan()">
+    <div id="inv-result"></div>
+  </div>
+</section>
+
+<!-- CONTAS -->
+<section class="view" id="v-contas">
+  <div id="contas-list"><div class="empty">Carregando…</div></div>
+</section>
+
+</main>
+
+<nav>
+  <button class="active" data-v="dash" onclick="nav('dash')">
+    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Painel</button>
+  <button data-v="import" onclick="nav('import')">
+    <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>Importar</button>
+  <button data-v="estoque" onclick="nav('estoque')">
+    <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>Estoque</button>
+  <button data-v="contas" onclick="nav('contas')">
+    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>Contas</button>
+</nav>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+let confData = null, estoqueCache = [], scanner = null;
+
+function toast(msg, type=''){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast show ' + type;
+  setTimeout(()=>t.className='toast '+type, 3200);
+}
+async function api(path, opts){
+  const r = await fetch(API + path, opts);
+  const d = await r.json().catch(()=>({erro:'Resposta inválida'}));
+  if(!r.ok) throw Object.assign(new Error(d.erro||'Erro'), {data:d, status:r.status});
+  return d;
+}
+const brl = n => 'R$ ' + (Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const TITLES = {dash:['Painel','Visão geral'],import:['Importar NF-e','Buscar nota'],conf:['Conferência','Revisar antes de lançar'],
+  estoque:['Estoque','Produtos'],saida:['Saída','Baixa manual'],inv:['Inventário','Contagem'],contas:['Contas a pagar','Financeiro']};
+
+function nav(v){
+  document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
+  document.getElementById('v-'+v).classList.add('active');
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
+  document.getElementById('hdr-sub').textContent = TITLES[v][0];
+  if(v==='dash') loadDash();
+  if(v==='estoque') loadEstoque();
+  if(v==='contas') loadContas();
+  if(v==='saida') loadProdSelect();
+  window.scrollTo(0,0);
+}
+
+/* DASHBOARD */
+async function loadDash(){
+  try{
+    const d = await api('/api/dashboard');
+    document.getElementById('dash-stats').innerHTML = `
+      <div class="stat good"><div class="n">${d.produtos_cadastrados}</div><div class="l">Produtos ativos</div></div>
+      <div class="stat ${d.produtos_estoque_baixo>0?'alert':''}"><div class="n">${d.produtos_estoque_baixo}</div><div class="l">Estoque baixo</div></div>
+      <div class="stat"><div class="n" style="font-size:22px">${brl(d.valor_estimado_estoque)}</div><div class="l">Valor em estoque</div></div>
+      <div class="stat"><div class="n">${d.notas_no_mes}</div><div class="l">Notas no mês</div></div>
+      <div class="stat ${d.contas_vencidas>0?'alert':''}"><div class="n">${d.contas_vencidas}</div><div class="l">Contas vencidas</div></div>
+      <div class="stat warn"><div class="n">${d.contas_vencendo_7dias}</div><div class="l">Vencem em 7 dias</div></div>
+      <div class="stat"><div class="n" style="font-size:22px">${brl(d.total_em_aberto)}</div><div class="l">Total em aberto</div></div>
+      <div class="stat ${d.contas_pendentes_info>0?'warn':''}"><div class="n">${d.contas_pendentes_info}</div><div class="l">Pendentes de info</div></div>`;
+    document.getElementById('dash-baixo').innerHTML = d.lista_estoque_baixo.length
+      ? d.lista_estoque_baixo.map(p=>`<div class="list-row"><div><div class="t">${p.nome||'—'}</div></div><div class="v" style="color:var(--danger)">${p.estoque} <span class="muted small">/ ${p.minimo}</span></div></div>`).join('')
+      : '<div class="muted small">Tudo em ordem.</div>';
+    document.getElementById('dash-movs').innerHTML = d.ultimas_movimentacoes.length
+      ? d.ultimas_movimentacoes.map(m=>`<div class="list-row"><div><div class="t">${m.tipo} · ${m.motivo||''}</div><div class="s">${m.data||''}</div></div><div class="v ${m.tipo==='SAIDA'?'':''}">${m.quantidade}</div></div>`).join('')
+      : '<div class="muted small">Sem movimentações ainda.</div>';
+  }catch(e){ document.getElementById('dash-stats').innerHTML = `<div class="empty">${e.message}</div>`; }
+}
+
+/* IMPORTAR */
+const chaveInput = document.getElementById('chave');
+chaveInput.addEventListener('input', ()=>{
+  let v = chaveInput.value.replace(/\D/g,'').slice(0,44);
+  chaveInput.value = v;
+  document.getElementById('chave-count').textContent = v.length + ' / 44 dígitos';
+});
+let pollTimer = null;
+async function buscarNfe(){
+  const chave = chaveInput.value.replace(/\D/g,'');
+  if(chave.length !== 44){ toast('A chave precisa ter 44 dígitos.','err'); return; }
+  const box = document.getElementById('status-box');
+  const btn = document.getElementById('btn-buscar');
+  btn.disabled = true; box.className = 'status-box show';
+  const render = (icon, txt, badge='') => box.innerHTML =
+    `<div class="status-row">${icon} <span>${txt}</span> ${badge}</div>`;
+  render('<div class="spinner"></div>','Consultando a Meu Danfe…');
+
+  async function step(){
+    try{
+      const r = await api('/api/nfe/buscar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave})});
+      if(r.status==='OK'){
+        render('✓','Nota encontrada! Carregando itens…','<span class="badge b-ok">OK</span>');
+        await abrirConferencia(chave); btn.disabled=false; return;
+      }
+      if(r.status==='WAITING'||r.status==='SEARCHING'){
+        render('<div class="spinner"></div>', r.status==='WAITING'?'Aguardando processamento…':'Buscando na SEFAZ…','<span class="badge b-wait">'+r.status+'</span>');
+        pollTimer = setTimeout(step, r.reconsultar_em_ms || r.aguardar_ms || 1500); return;
+      }
+      if(r.status==='NOT_FOUND'){ render('✕','Nota não encontrada na SEFAZ.','<span class="badge b-err">NOT_FOUND</span>'); btn.disabled=false; return; }
+      render('✕', r.mensagem||'Erro ao consultar.','<span class="badge b-err">ERROR</span>'); btn.disabled=false;
+    }catch(e){
+      if(e.status===409){ render('!','Esta nota já foi importada.','<span class="badge b-info">DUPLICADA</span>'); btn.disabled=false; return; }
+      if(e.status===429 && e.data.status==='WAITING'){ pollTimer=setTimeout(step, e.data.aguardar_ms||1200); return; }
+      render('✕', e.message,'<span class="badge b-err">ERRO</span>'); btn.disabled=false;
+    }
+  }
+  step();
+}
+async function enviarXmlManual(){
+  const xml = document.getElementById('xml-manual').value.trim();
+  if(!xml.startsWith('<')){ toast('Cole o conteúdo do XML.','err'); return; }
+  try{
+    toast('Processando XML…');
+    const r = await api('/api/nfe/add-xml',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({xml})});
+    confData = r; renderConferencia(); nav('conf');
+  }catch(e){
+    if(e.status===409){ toast('Esta nota já foi importada.','err'); return; }
+    toast(e.message,'err');
+  }
+}
+
+/* CONFERÊNCIA */
+async function abrirConferencia(chave){
+  const r = await api('/api/nfe/conferir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave})});
+  confData = r;
+  renderConferencia();
+  nav('conf');
+}
+function renderConferencia(){
+  const r = confData;
+  const c = document.getElementById('conf-content');
+  let html = '';
+  if(r.alertaDestinatario) html += `<div class="alertbar">⚠ ${r.alertaDestinatario}</div>`;
+  html += `<div class="card">
+    <h2 style="font-size:18px">${r.fornecedor.razao_social||'Fornecedor'}</h2>
+    <div class="muted small">CNPJ ${r.fornecedor.cnpj} · NF ${r.nota.numero_nota}/${r.nota.serie}</div>
+    <hr><div class="row"><div><div class="muted small">Emissão</div><b>${r.nota.data_emissao||'—'}</b></div>
+    <div><div class="muted small">Total</div><b style="font-family:Fraunces">${brl(r.nota.valor_total_nota)}</b></div></div>
+  </div>`;
+  html += `<div class="sec-title">Produtos (${r.itens.length})</div>`;
+  r.itens.forEach((it,i)=>{
+    const novo = it.produto_novo;
+    html += `<div class="item">
+      <div class="top"><div class="desc">${it.descricao_original}</div>
+        ${novo?'<span class="badge b-new">NOVO</span>':'<span class="badge b-ok">cadastrado</span>'}</div>
+      <div class="meta">Cód ${it.codigo_produto_nf}${it.codigo_barras?' · EAN '+it.codigo_barras:''} · ${it.quantidade_nf} ${it.unidade_nf}</div>
+      <div class="calc">
+        <div><span class="muted">Fator</span><b><input type="number" value="${it.fator_conversao}" style="padding:6px;width:70px;font-size:14px" onchange="ajustarFator(${i},this.value)"></b></div>
+        <div><span class="muted">Estoque</span><b id="qe-${i}">${it.quantidade_estoque}</b></div>
+        <div><span class="muted">Custo un.</span><b id="cu-${i}">${brl(it.custo_unitario_estoque)}</b></div>
+      </div>`;
+    if(novo){
+      html += `<div style="margin-top:12px;border-top:1px dashed var(--line);padding-top:10px">
+        <input placeholder="Nome interno" value="${it.descricao_original}" onchange="confData.itens[${i}].nome_interno=this.value" style="margin-bottom:8px">
+        <div class="row">
+          <select onchange="confData.itens[${i}].categoria_id=this.value" id="cat-${i}"><option value="">Categoria…</option></select>
+          <input placeholder="Un. estoque" value="UN" onchange="confData.itens[${i}].unidade_estoque=this.value">
+        </div>
+        <input type="number" placeholder="Estoque mínimo" onchange="confData.itens[${i}].estoque_minimo=this.value" style="margin-top:8px">
+      </div>`;
+    }
+    html += `</div>`;
+  });
+  html += `<div class="sec-title">Parcelas / Contas a pagar</div>`;
+  r.parcelas.forEach((p,i)=>{
+    html += `<div class="item"><div class="top">
+      <div><div class="desc">Parcela ${p.numero_parcela}</div>
+      <div class="meta">${p.forma_pagamento}</div></div>
+      <div style="text-align:right"><b style="font-family:Fraunces">${brl(p.valor)}</b>
+      ${p.status==='PENDENTE_INFO'?'<div><span class="badge b-wait">sem vencimento</span></div>':''}</div></div>
+      <label>Vencimento</label><input type="date" value="${p.vencimento||''}" onchange="confData.parcelas[${i}].vencimento=this.value;confData.parcelas[${i}].status='ABERTO'">
+    </div>`;
+  });
+  html += `<button class="btn" onclick="confirmarImportacao()">Confirmar e lançar no estoque</button>
+    <button class="btn-2" style="width:100%;padding:13px;margin-top:10px" onclick="nav('import')">Cancelar</button>`;
+  c.innerHTML = html;
+  // preencher categorias nos selects de produtos novos
+  carregarCategoriasNosSelects();
+}
+function ajustarFator(i, val){
+  const f = parseFloat(val)||1;
+  const it = confData.itens[i];
+  it.fator_conversao = f;
+  it.quantidade_estoque = it.quantidade_nf * f;
+  it.custo_unitario_estoque = it.quantidade_estoque>0 ? it.valor_total_nf/it.quantidade_estoque : 0;
+  document.getElementById('qe-'+i).textContent = it.quantidade_estoque;
+  document.getElementById('cu-'+i).textContent = brl(it.custo_unitario_estoque);
+}
+let catCache = null;
+async function carregarCategoriasNosSelects(){
+  if(!catCache){ try{ catCache = (await api('/api/listar?aba=Categorias')).rows; }catch{ catCache=[]; } }
+  confData.itens.forEach((it,i)=>{
+    const sel = document.getElementById('cat-'+i);
+    if(sel) catCache.forEach(c=> sel.insertAdjacentHTML('beforeend', `<option value="${c.id_categoria}">${c.nome_categoria}</option>`));
+  });
+}
+async function confirmarImportacao(){
+  try{
+    toast('Lançando no estoque…');
+    const r = await api('/api/nfe/confirmar',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({chave:confData.chave, nota:confData.nota, fornecedor:confData.fornecedor,
+        itens:confData.itens, parcelas:confData.parcelas, xml:confData.xml})});
+    toast(`Nota ${r.id_nota} lançada! ${r.itens_lancados} itens, ${r.parcelas_criadas} parcela(s).`,'ok');
+    confData=null;
+    document.getElementById('conf-content').innerHTML='<div class="empty">Nota lançada com sucesso ✓</div>';
+    chaveInput.value=''; document.getElementById('chave-count').textContent='0 / 44 dígitos';
+    setTimeout(()=>nav('dash'),1200);
+  }catch(e){ toast(e.message,'err'); }
+}
+
+/* ESTOQUE */
+async function loadEstoque(){
+  try{
+    estoqueCache = (await api('/api/listar?aba=Produtos')).rows.filter(p=>String(p.ativo).toUpperCase()==='SIM');
+    renderEstoque(estoqueCache);
+  }catch(e){ document.getElementById('estoque-list').innerHTML=`<div class="empty">${e.message}</div>`; }
+}
+function renderEstoque(list){
+  const el = document.getElementById('estoque-list');
+  if(!list.length){ el.innerHTML='<div class="empty">Nenhum produto.</div>'; return; }
+  el.innerHTML = list.map(p=>{
+    const baixo = p.estoque_minimo!=='' && parseFloat(p.estoque_atual)<=parseFloat(p.estoque_minimo);
+    return `<div class="list-row"><div><div class="t">${p.nome_interno||p.descricao_original_nf}</div>
+      <div class="s">Custo méd. ${brl(p.custo_medio)} · mín ${p.estoque_minimo||'—'}</div></div>
+      <div class="v" style="${baixo?'color:var(--danger)':''}">${p.estoque_atual} <span class="muted small">${p.unidade_estoque||''}</span></div></div>`;
+  }).join('');
+}
+function filtrarEstoque(){
+  const q = document.getElementById('busca-estoque').value.toLowerCase();
+  renderEstoque(estoqueCache.filter(p=>(p.nome_interno||p.descricao_original_nf||'').toLowerCase().includes(q)));
+}
+async function loadProdSelect(){
+  if(!estoqueCache.length) await loadEstoque();
+  const sel = document.getElementById('saida-prod');
+  sel.innerHTML = estoqueCache.map(p=>`<option value="${p.id_produto}">${p.nome_interno||p.descricao_original_nf} (${p.estoque_atual})</option>`).join('');
+}
+async function darSaida(){
+  const id = document.getElementById('saida-prod').value;
+  const qtd = document.getElementById('saida-qtd').value;
+  if(!id||!qtd){ toast('Preencha produto e quantidade.','err'); return; }
+  try{
+    const r = await api('/api/estoque/saida',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id_produto:id,quantidade:qtd,motivo:document.getElementById('saida-motivo').value,observacao:document.getElementById('saida-obs').value})});
+    toast(`Saída registrada. Estoque: ${r.estoque_atual}`, r.alerta_negativo?'err':'ok');
+    document.getElementById('saida-qtd').value=''; document.getElementById('saida-obs').value='';
+    estoqueCache=[]; 
+  }catch(e){ toast(e.message,'err'); }
+}
+
+/* INVENTÁRIO */
+function toggleScanner(){
+  const div = document.getElementById('scanner');
+  if(div.classList.contains('show')){ stopScanner(); return; }
+  div.classList.add('show');
+  scanner = new Html5Qrcode('scanner');
+  scanner.start({facingMode:'environment'}, {fps:10,qrbox:{width:250,height:120}},
+    (txt)=>{ document.getElementById('inv-ean').value=txt; stopScanner(); buscarPorEan(); },
+    ()=>{}).catch(e=>{ toast('Câmera indisponível: '+e,'err'); div.classList.remove('show'); });
+}
+function stopScanner(){
+  const div = document.getElementById('scanner');
+  if(scanner){ scanner.stop().then(()=>scanner.clear()).catch(()=>{}); scanner=null; }
+  div.classList.remove('show');
+}
+async function buscarPorEan(){
+  const ean = document.getElementById('inv-ean').value.trim();
+  if(!ean) return;
+  const box = document.getElementById('inv-result');
+  try{
+    const p = await api('/api/estoque/inventario?codigo_barras='+encodeURIComponent(ean));
+    box.innerHTML = `<div class="card" style="margin-top:14px">
+      <div class="t" style="font-weight:600">${p.nome_interno}</div>
+      <div class="muted small">Estoque no sistema: <b>${p.estoque_atual} ${p.unidade||''}</b></div>
+      <label>Quantidade contada</label>
+      <input type="number" id="inv-contada" inputmode="decimal" placeholder="0">
+      <button class="btn" onclick="ajustarInventario('${p.id_produto}',${p.estoque_atual})">Confirmar ajuste</button></div>`;
+  }catch(e){ box.innerHTML = `<div class="alertbar" style="margin-top:14px">${e.message}</div>`; }
+}
+async function ajustarInventario(id, atual){
+  const contada = document.getElementById('inv-contada').value;
+  if(contada===''){ toast('Informe a quantidade contada.','err'); return; }
+  try{
+    const r = await api('/api/estoque/inventario',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id_produto:id,quantidade_contada:contada})});
+    toast(`Ajustado. Diferença: ${r.diferenca>0?'+':''}${r.diferenca}`,'ok');
+    document.getElementById('inv-result').innerHTML=''; document.getElementById('inv-ean').value='';
+    estoqueCache=[];
+  }catch(e){ toast(e.message,'err'); }
+}
+
+/* CONTAS */
+async function loadContas(){
+  try{
+    const rows = (await api('/api/listar?aba=Contas_Pagar')).rows;
+    const el = document.getElementById('contas-list');
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    const abertas = rows.filter(c=>['ABERTO','PENDENTE_INFO'].includes(String(c.status).toUpperCase()));
+    if(!abertas.length){ el.innerHTML='<div class="empty">Nenhuma conta em aberto.</div>'; return; }
+    const cat = (c)=>{
+      if(String(c.status).toUpperCase()==='PENDENTE_INFO') return {k:'pend',badge:'<span class="badge b-wait">sem vencimento</span>'};
+      const v=new Date(c.vencimento);
+      if(isNaN(v)) return {k:'pend',badge:'<span class="badge b-wait">sem data</span>'};
+      v.setHours(0,0,0,0);
+      if(v<hoje) return {k:'venc',badge:'<span class="badge b-err">vencida</span>'};
+      if(v.getTime()===hoje.getTime()) return {k:'hoje',badge:'<span class="badge b-warn" style="background:#322a12;color:var(--warn)">vence hoje</span>'};
+      const d7=new Date(hoje); d7.setDate(d7.getDate()+7);
+      if(v<=d7) return {k:'7',badge:'<span class="badge b-info">7 dias</span>'};
+      return {k:'fut',badge:''};
+    };
+    el.innerHTML = '<div class="card">' + abertas.map(c=>{
+      const m=cat(c);
+      return `<div class="list-row"><div><div class="t">${c.descricao}</div>
+        <div class="s">Venc. ${c.vencimento||'—'} · ${c.forma_pagamento} ${m.badge}</div></div>
+        <div style="text-align:right"><div class="v">${brl(c.valor)}</div>
+        <button class="btn-2 btn-sm" style="margin-top:6px;padding:6px 12px;font-size:12px" onclick="pagar('${c.id_conta}')">Pagar</button></div></div>`;
+    }).join('') + '</div>';
+  }catch(e){ document.getElementById('contas-list').innerHTML=`<div class="empty">${e.message}</div>`; }
+}
+async function pagar(id){
+  try{ await api('/api/contas/pagar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id_conta:id})});
+    toast('Conta marcada como paga ✓','ok'); loadContas();
+  }catch(e){ toast(e.message,'err'); }
+}
+
+/* DIAGNÓSTICO */
+async function rodarDiagnostico(){
+  const box = document.getElementById('diag-result');
+  box.innerHTML = '<div class="card"><div class="status-row"><div class="spinner"></div> Testando conexões…</div></div>';
+  try{
+    const d = await api('/api/teste');
+    const linha = (titulo, c) => {
+      const ok = c.ok !== false;
+      const badge = ok ? '<span class="badge b-ok">OK</span>' : '<span class="badge b-err">FALHA</span>';
+      let det = '';
+      if(c.faltando && c.faltando.length) det = `<div class="s">Faltando: ${c.faltando.join(', ')}</div>`;
+      else if(c.motivo) det = `<div class="s">${c.motivo}</div>`;
+      else if(c.erro) det = `<div class="s">${c.erro}</div>`;
+      else if(c.abas){ const falhas=Object.entries(c.abas).filter(([k,v])=>!v.ok).map(([k])=>k);
+        det = falhas.length?`<div class="s">Abas com erro: ${falhas.join(', ')}</div>`:'<div class="s">Todas as abas acessíveis</div>'; }
+      return `<div class="list-row"><div><div class="t">${titulo}</div>${det}</div><div>${badge}</div></div>`;
+    };
+    const c = d.checagens;
+    box.innerHTML = `<div class="card">
+      <h3 style="font-size:16px;margin-bottom:6px">${d.tudo_ok?'✓ Tudo configurado':'⚠ Há pendências'}</h3>
+      ${linha('Variáveis de ambiente', c.variaveis_ambiente)}
+      ${linha('Google Sheets', c.google_sheets)}
+      ${linha('API Meu Danfe', c.meu_danfe)}
+      ${c.busca_real?linha('Busca real de NF-e', c.busca_real):''}
+    </div>`;
+  }catch(e){ box.innerHTML = `<div class="alertbar" style="margin-top:10px">${e.message}</div>`; }
+}
+
+loadDash();
+</script>
+</body>
+</html>

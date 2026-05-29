@@ -78,8 +78,8 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:
 nav button{flex:1;background:none;color:var(--muted);padding:8px 2px;font-size:10.5px;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:4px}
 nav button.active{color:var(--accent)}
 nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
-#scanner{border-radius:12px;overflow:hidden;margin-top:14px;display:none}
-#scanner.show{display:block}
+#scanner,#scanner-edit{border-radius:12px;overflow:hidden;margin-top:14px;display:none}
+#scanner.show,#scanner-edit.show{display:block}
 .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--line);
   color:var(--ink);padding:13px 20px;border-radius:12px;font-size:14px;z-index:100;box-shadow:var(--shadow);opacity:0;transition:opacity .3s;max-width:90%;text-align:center}
 .toast.show{opacity:1}
@@ -175,6 +175,33 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
   </div>
 </section>
 
+<!-- EDITAR PRODUTO -->
+<section class="view" id="v-prodedit">
+  <div class="card">
+    <h2 style="font-size:19px">Editar produto</h2>
+    <div class="muted small" id="pe-orig" style="margin-top:4px">—</div>
+    <input type="hidden" id="pe-id">
+    <label>Nome do produto</label>
+    <input id="pe-nome" placeholder="Ex.: Cerveja Heineken lata 350ml">
+    <label>Código de barras (da unidade)</label>
+    <div class="row">
+      <input id="pe-ean" inputmode="numeric" placeholder="bipe ou digite o código" style="flex:2">
+      <button class="btn-2 btn-sm" type="button" style="flex:1;padding:13px" onclick="scanEdit()">📷 Ler</button>
+    </div>
+    <div class="small muted" style="margin-top:6px">É o código que você vai bipar no inventário (o da unidade, não o da caixa).</div>
+    <div id="scanner-edit"></div>
+    <label>Unidade de medida</label>
+    <select id="pe-unidade"></select>
+    <label>Estoque mínimo</label>
+    <input id="pe-min" type="number" inputmode="decimal" placeholder="0">
+    <label>Categoria</label>
+    <select id="pe-cat"><option value="">Sem categoria</option></select>
+    <div class="muted small" id="pe-estoque" style="margin-top:16px"></div>
+    <button class="btn" onclick="salvarProduto()">Salvar alterações</button>
+    <button class="btn-2" style="width:100%;padding:13px;margin-top:10px" onclick="nav('estoque')">Cancelar</button>
+  </div>
+</section>
+
 <!-- CONTAS -->
 <section class="view" id="v-contas">
   <div id="contas-list"><div class="empty">Carregando…</div></div>
@@ -197,7 +224,21 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
 
 <script>
 const API = '';
-let confData = null, estoqueCache = [], scanner = null;
+let confData = null, estoqueCache = [], scanners = {};
+
+// Unidades de medida disponíveis (código guardado na planilha -> rótulo amigável)
+const UNIDADES = [
+  ['UN','Unidade (UN)'],['CX','Caixa (CX)'],['FD','Fardo (FD)'],['PCT','Pacote (PCT)'],
+  ['KG','Quilo (KG)'],['G','Grama (G)'],['L','Litro (L)'],['ML','Mililitro (ML)'],
+  ['DZ','Dúzia (DZ)'],['LT','Lata (LT)'],['GRF','Garrafa (GRF)'],['SC','Saco (SC)'],
+  ['BDJ','Bandeja (BDJ)'],['M','Metro (M)'],
+];
+function unidadeOptions(sel){
+  sel = String(sel||'').trim().toUpperCase() || 'UN';
+  let lista = UNIDADES.slice();
+  if(!lista.some(u=>u[0]===sel)) lista.unshift([sel, sel]); // mantém valor atual fora da lista padrão
+  return lista.map(u=>`<option value="${u[0]}"${u[0]===sel?' selected':''}>${u[1]}</option>`).join('');
+}
 
 function toast(msg, type=''){
   const t = document.getElementById('toast');
@@ -212,9 +253,11 @@ async function api(path, opts){
 }
 const brl = n => 'R$ ' + (Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const TITLES = {dash:['Painel','Visão geral'],import:['Importar NF-e','Buscar nota'],conf:['Conferência','Revisar antes de lançar'],
-  estoque:['Estoque','Produtos'],saida:['Saída','Baixa manual'],inv:['Inventário','Contagem'],contas:['Contas a pagar','Financeiro']};
+  estoque:['Estoque','Produtos'],saida:['Saída','Baixa manual'],inv:['Inventário','Contagem'],
+  prodedit:['Editar produto','Ajustar dados'],contas:['Contas a pagar','Financeiro']};
 
 function nav(v){
+  stopScanInto('scanner'); stopScanInto('scanner-edit'); // desliga a câmera ao trocar de tela
   document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
   document.getElementById('v-'+v).classList.add('active');
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
@@ -335,7 +378,7 @@ function renderConferencia(){
         <input placeholder="Nome interno" value="${it.descricao_original}" onchange="confData.itens[${i}].nome_interno=this.value" style="margin-bottom:8px">
         <div class="row">
           <select onchange="confData.itens[${i}].categoria_id=this.value" id="cat-${i}"><option value="">Categoria…</option></select>
-          <input placeholder="Un. estoque" value="UN" onchange="confData.itens[${i}].unidade_estoque=this.value">
+          <select onchange="confData.itens[${i}].unidade_estoque=this.value">${unidadeOptions(it.unidade_estoque||'UN')}</select>
         </div>
         <input type="number" placeholder="Estoque mínimo" onchange="confData.itens[${i}].estoque_minimo=this.value" style="margin-top:8px">
       </div>`;
@@ -401,7 +444,7 @@ function renderEstoque(list){
   if(!list.length){ el.innerHTML='<div class="empty">Nenhum produto.</div>'; return; }
   el.innerHTML = list.map(p=>{
     const baixo = p.estoque_minimo!=='' && parseFloat(p.estoque_atual)<=parseFloat(p.estoque_minimo);
-    return `<div class="list-row"><div><div class="t">${p.nome_interno||p.descricao_original_nf}</div>
+    return `<div class="list-row" style="cursor:pointer" onclick="editarProduto('${p.id_produto}')"><div><div class="t">${p.nome_interno||p.descricao_original_nf} <span class="muted" style="font-weight:400">✎</span></div>
       <div class="s">Custo méd. ${brl(p.custo_medio)} · mín ${p.estoque_minimo||'—'}</div></div>
       <div class="v" style="${baixo?'color:var(--danger)':''}">${p.estoque_atual} <span class="muted small">${p.unidade_estoque||''}</span></div></div>`;
   }).join('');
@@ -428,21 +471,72 @@ async function darSaida(){
   }catch(e){ toast(e.message,'err'); }
 }
 
+/* EDITAR PRODUTO */
+function editarProduto(id){
+  const p = estoqueCache.find(x=>String(x.id_produto)===String(id));
+  if(!p){ toast('Produto não encontrado.','err'); return; }
+  document.getElementById('pe-id').value = p.id_produto;
+  document.getElementById('pe-orig').textContent = 'Descrição da nota: ' + (p.descricao_original_nf||'—');
+  document.getElementById('pe-nome').value = p.nome_interno || p.descricao_original_nf || '';
+  document.getElementById('pe-ean').value = p.codigo_barras || '';
+  document.getElementById('pe-unidade').innerHTML = unidadeOptions(p.unidade_estoque);
+  document.getElementById('pe-min').value = p.estoque_minimo || '';
+  document.getElementById('pe-estoque').innerHTML =
+    `Estoque atual: <b>${p.estoque_atual} ${p.unidade_estoque||''}</b> · custo méd. ${brl(p.custo_medio)}`
+    + `<br><span class="small">Para mudar a quantidade, use Inventário ou Saída.</span>`;
+  preencherCategoriasEdit(p.categoria_id);
+  nav('prodedit');
+}
+async function preencherCategoriasEdit(selId){
+  if(!catCache){ try{ catCache=(await api('/api/listar?aba=Categorias')).rows; }catch{ catCache=[]; } }
+  const sel = document.getElementById('pe-cat');
+  sel.innerHTML = '<option value="">Sem categoria</option>' + catCache.map(c=>
+    `<option value="${c.id_categoria}"${String(c.id_categoria)===String(selId)?' selected':''}>${c.nome_categoria}</option>`).join('');
+}
+async function salvarProduto(forcar){
+  const body = {
+    id_produto: document.getElementById('pe-id').value,
+    nome_interno: document.getElementById('pe-nome').value.trim(),
+    codigo_barras: document.getElementById('pe-ean').value.trim(),
+    unidade_estoque: document.getElementById('pe-unidade').value,
+    estoque_minimo: document.getElementById('pe-min').value,
+    categoria_id: document.getElementById('pe-cat').value,
+  };
+  if(forcar) body.forcar = true;
+  if(!body.nome_interno){ toast('Dê um nome ao produto.','err'); return; }
+  try{
+    await api('/api/produto/atualizar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    stopScanInto('scanner-edit');
+    toast('Produto atualizado ✓','ok');
+    estoqueCache=[]; await loadEstoque(); nav('estoque');
+  }catch(e){
+    if(e.status===409 && !forcar){
+      if(confirm(e.data.erro + '\n\nUsar este código mesmo assim?')) salvarProduto(true);
+      return;
+    }
+    toast(e.message,'err');
+  }
+}
+
 /* INVENTÁRIO */
-function toggleScanner(){
-  const div = document.getElementById('scanner');
-  if(div.classList.contains('show')){ stopScanner(); return; }
+function startScanInto(divId, onResult){
+  const div = document.getElementById(divId);
+  if(div.classList.contains('show')){ stopScanInto(divId); return; }
   div.classList.add('show');
-  scanner = new Html5Qrcode('scanner');
-  scanner.start({facingMode:'environment'}, {fps:10,qrbox:{width:250,height:120}},
-    (txt)=>{ document.getElementById('inv-ean').value=txt; stopScanner(); buscarPorEan(); },
+  const s = new Html5Qrcode(divId);
+  scanners[divId] = s;
+  s.start({facingMode:'environment'}, {fps:10,qrbox:{width:250,height:120}},
+    (txt)=>{ stopScanInto(divId); onResult(txt); },
     ()=>{}).catch(e=>{ toast('Câmera indisponível: '+e,'err'); div.classList.remove('show'); });
 }
-function stopScanner(){
-  const div = document.getElementById('scanner');
-  if(scanner){ scanner.stop().then(()=>scanner.clear()).catch(()=>{}); scanner=null; }
-  div.classList.remove('show');
+function stopScanInto(divId){
+  const div = document.getElementById(divId);
+  const s = scanners[divId];
+  if(s){ s.stop().then(()=>s.clear()).catch(()=>{}); delete scanners[divId]; }
+  if(div) div.classList.remove('show');
 }
+function toggleScanner(){ startScanInto('scanner', (txt)=>{ document.getElementById('inv-ean').value=txt; buscarPorEan(); }); }
+function scanEdit(){ startScanInto('scanner-edit', (txt)=>{ document.getElementById('pe-ean').value=txt; }); }
 async function buscarPorEan(){
   const ean = document.getElementById('inv-ean').value.trim();
   if(!ean) return;

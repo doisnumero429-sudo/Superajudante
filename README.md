@@ -71,6 +71,7 @@ vercel --prod # produção
 | GET | `/api/nfe/danfe?chave=` | DANFE em PDF (base64) |
 | GET | `/api/dashboard` | indicadores do painel |
 | GET | `/api/listar?aba=` | lista qualquer aba |
+| POST | `/api/produto/atualizar` | edita produto (nome, código de barras, unidade, mínimo, categoria) |
 | POST | `/api/estoque/saida` | saída manual de estoque |
 | GET/POST | `/api/estoque/inventario` | busca por EAN / ajuste por contagem |
 | POST | `/api/contas/pagar` | marca conta como paga |

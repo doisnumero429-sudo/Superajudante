@@ -7,7 +7,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Spline+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="capacitor.js" onerror="void 0"></script>
 <style>
+body.scanner-active{background:transparent!important}
+body.scanner-active .app,body.scanner-active header,body.scanner-active nav,body.scanner-active .toast{display:none}
 :root{
   --bg:#0f1413; --surface:#161d1c; --surface2:#1e2726; --line:#2a3534;
   --ink:#e8efe9; --muted:#8b9a96; --accent:#48c78e; --accent-d:#2f9d6e;
@@ -449,9 +452,26 @@ async function _loadQuagga(){
 
 async function _startScanner(containerId, onResult){
   _stopActiveScan();
+
+  // Caminho 1: Capacitor nativo (MLKit — melhor precisão)
+  const isNative = window.Capacitor?.isNativePlatform?.();
+  if(isNative){
+    const BS = window.Capacitor.Plugins.BarcodeScanner;
+    const perm = await BS.checkPermission({force:true});
+    if(!perm.granted) throw new Error('Permissão de câmera negada.');
+    document.body.classList.add('scanner-active');
+    BS.hideBackground();
+    _activeScan = {stop(){ BS.stopScan(); BS.showBackground(); document.body.classList.remove('scanner-active'); }};
+    const result = await BS.startScan();
+    _stopActiveScan();
+    if(result.hasContent) onResult(result.content);
+    return;
+  }
+
   const el=document.getElementById(containerId);
   el.innerHTML=''; el.classList.add('show');
 
+  // Caminho 2: BarcodeDetector nativa do browser (Chrome/Android)
   if('BarcodeDetector' in window){
     let detector;
     try{ detector=new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','qr_code']}); }

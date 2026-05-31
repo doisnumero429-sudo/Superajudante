@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Super Ajudante</string>
+    <string name="title_activity_main">Super Ajudante</string>
+    <string name="package_name">br.com.superajudante</string>
+    <string name="custom_url_scheme">br.com.superajudante</string>
+</resources>

@@ -5,7 +5,7 @@
 // e nao estoura o timeout da Vercel.
 
 import { addNfe } from '../_lib/meudanfe.js';
-import { readRows, readConfig } from '../_lib/sheets.js';
+import { readRows, readConfig } from '../_lib/db.js';
 import { json, validarChave, readBody, podeConsultar, registrarConsulta, resetarTentativas } from '../_lib/util.js';
 
 export default async function handler(req, res) {

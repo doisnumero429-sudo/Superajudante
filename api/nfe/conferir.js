@@ -4,7 +4,7 @@
 
 import { getXml } from '../_lib/meudanfe.js';
 import { parseNfe, descreverFormaPagamento } from '../_lib/parser.js';
-import { readRows, readConfig } from '../_lib/sheets.js';
+import { readRows, readConfig } from '../_lib/db.js';
 import { json, validarChave, readBody } from '../_lib/util.js';
 
 export default async function handler(req, res) {

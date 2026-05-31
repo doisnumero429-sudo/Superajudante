@@ -1,7 +1,7 @@
 // api/estoque/inventario.js
 // GET  ?codigo_barras=...  -> encontra produto e mostra estoque atual.
 // POST { id_produto, quantidade_contada, usuario } -> ajusta estoque pela diferenca.
-import { readRows, appendRow, updateRow, nextId } from '../_lib/sheets.js';
+import { readRows, appendRow, updateRow, nextId } from '../_lib/db.js';
 import { json, readBody, nowStr } from '../_lib/util.js';
 
 export default async function handler(req, res) {
@@ -33,9 +33,8 @@ export default async function handler(req, res) {
       const custo = parseFloat(prod.custo_medio) || 0;
       const agora = nowStr();
 
-      const o = { ...prod }; delete o._row;
-      await updateRow('Produtos', prod._row, {
-        ...o, estoque_atual: Number(contada.toFixed(3)), atualizado_em: agora,
+      await updateRow('Produtos', prod.id_produto, {
+        ...prod, estoque_atual: Number(contada.toFixed(3)), atualizado_em: agora,
       });
 
       if (diff !== 0) {

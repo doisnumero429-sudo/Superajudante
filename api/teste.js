@@ -1,30 +1,29 @@
 // api/teste.js
 // GET /api/teste -> verifica a configuracao do Super Ajudante:
 //  - variaveis de ambiente presentes
-//  - conexao com o Google Sheets (le as abas e confere cabecalhos)
-//  - conexao com a Meu Danfe (chamada leve que valida a Api-Key sem gastar credito)
-// NAO faz busca de NF-e (que custaria R$ 0,03). Use ?chave=... para um teste real opcional.
+//  - conexao com o Supabase (le as tabelas)
+//  - conexao com a Meu Danfe (valida Api-Key sem gastar credito)
 
-import { readRows, readConfig, SHEETS } from './_lib/sheets.js';
+import { readRows, readConfig, TABLES } from './_lib/db.js';
 import { json } from './_lib/util.js';
 
 export default async function handler(req, res) {
   const resultado = { app: 'Super Ajudante', timestamp: new Date().toISOString(), checagens: {} };
 
   // 1) Variaveis de ambiente
-  const envs = ['API_KEY_MEU_DANFE', 'GOOGLE_SHEET_ID', 'GOOGLE_SERVICE_ACCOUNT_EMAIL', 'GOOGLE_PRIVATE_KEY'];
+  const envs = ['API_KEY_MEU_DANFE', 'SUPABASE_URL', 'SUPABASE_SERVICE_KEY'];
   const faltando = envs.filter((e) => !process.env[e]);
   resultado.checagens.variaveis_ambiente = {
     ok: faltando.length === 0,
-    presentes: envs.filter((e) => process.env[e]).map((e) => e),
+    presentes: envs.filter((e) => process.env[e]),
     faltando,
   };
 
-  // 2) Google Sheets: tenta ler cada aba e conferir se os cabecalhos batem
+  // 2) Supabase: le cada tabela e verifica acesso
   try {
-    const abas = Object.keys(SHEETS);
+    const tabelas = Object.keys(TABLES);
     const detalhe = {};
-    for (const aba of abas) {
+    for (const aba of tabelas) {
       try {
         const rows = await readRows(aba);
         detalhe[aba] = { ok: true, linhas: rows.length };
@@ -33,19 +32,17 @@ export default async function handler(req, res) {
       }
     }
     const cfg = await readConfig();
-    resultado.checagens.google_sheets = {
+    resultado.checagens.supabase = {
       ok: Object.values(detalhe).every((d) => d.ok),
-      abas: detalhe,
+      tabelas: detalhe,
       configuracoes_lidas: Object.keys(cfg),
       cnpj_restaurante_definido: !!(cfg.CNPJ_RESTAURANTE && String(cfg.CNPJ_RESTAURANTE).replace(/\D/g, '').length === 14),
     };
   } catch (e) {
-    resultado.checagens.google_sheets = { ok: false, erro: e.message };
+    resultado.checagens.supabase = { ok: false, erro: e.message };
   }
 
   // 3) Meu Danfe: valida a Api-Key sem gastar credito.
-  // Uma chave invalida (poucos digitos) deve retornar 400 "Chave invalida" SE a Api-Key
-  // estiver correta; 401/403 indicam problema na Api-Key. Nao gera cobranca (nao e busca valida).
   try {
     const base = process.env.BASE_URL_API || 'https://api.meudanfe.com.br/v2';
     const r = await fetch(`${base}/fd/add/0`, {

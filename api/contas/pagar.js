@@ -1,6 +1,6 @@
 // api/contas/pagar.js
 // POST { id_conta, data_pagamento?, forma_pagamento? } -> marca como PAGO.
-import { readRows, updateRow } from '../_lib/sheets.js';
+import { readRows, updateRow } from '../_lib/db.js';
 import { json, readBody, nowStr } from '../_lib/util.js';
 
 export default async function handler(req, res) {
@@ -12,9 +12,8 @@ export default async function handler(req, res) {
     const c = contas.find((x) => x.id_conta === b.id_conta);
     if (!c) return json(res, 404, { erro: 'Conta nao encontrada.' });
 
-    const o = { ...c }; delete o._row;
-    await updateRow('Contas_Pagar', c._row, {
-      ...o,
+    await updateRow('Contas_Pagar', c.id_conta, {
+      ...c,
       status: 'PAGO',
       data_pagamento: b.data_pagamento || nowStr().slice(0, 10),
       forma_pagamento: b.forma_pagamento || c.forma_pagamento,

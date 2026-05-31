@@ -5,7 +5,7 @@
 
 import {
   readRows, appendRow, updateRow, nextId,
-} from '../_lib/sheets.js';
+} from '../_lib/db.js';
 import { json, validarChave, readBody, nowStr } from '../_lib/util.js';
 
 export default async function handler(req, res) {
@@ -117,8 +117,8 @@ export default async function handler(req, res) {
         const novoCustoMedio = novoEstoque > 0
           ? ((estoqueAtual * custoMedioAnt) + (qtdEstoque * custoUnit)) / novoEstoque
           : custoUnit;
-        await updateRow('Produtos', prod._row, {
-          ...stripRow(prod),
+        await updateRow('Produtos', prod.id_produto, {
+          ...prod,
           estoque_atual: Number(novoEstoque.toFixed(3)),
           ultimo_custo_unitario: Number(custoUnit.toFixed(4)),
           custo_medio: Number(novoCustoMedio.toFixed(4)),
@@ -154,7 +154,7 @@ export default async function handler(req, res) {
         produtos.push({
           id_produto: idProduto, cnpj_fornecedor: cnpjForn,
           codigo_produto_nf: it.codigo_produto_nf, codigo_barras: it.codigo_barras,
-          estoque_atual: qtdEstoque, custo_medio: custoUnit, _row: null,
+          estoque_atual: qtdEstoque, custo_medio: custoUnit,
         });
       }
 
@@ -236,9 +236,3 @@ export default async function handler(req, res) {
   }
 }
 
-// Remove o campo interno _row antes de reescrever a linha.
-function stripRow(obj) {
-  const o = { ...obj };
-  delete o._row;
-  return o;
-}

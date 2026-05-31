@@ -1,5 +1,5 @@
 // api/dashboard.js
-import { readRows } from './_lib/sheets.js';
+import { readRows } from './_lib/db.js';
 import { json } from './_lib/util.js';
 
 export default async function handler(req, res) {

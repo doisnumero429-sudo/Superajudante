@@ -1,0 +1,13 @@
+{
+  "appId": "br.com.superajudante",
+  "appName": "Super Ajudante",
+  "webDir": "public",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "BarcodeScanner": {
+      "cameraPermissionText": "O Super Ajudante precisa da câmera para ler códigos de barras."
+    }
+  }
+}

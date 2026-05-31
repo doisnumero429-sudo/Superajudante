@@ -362,7 +362,6 @@ function renderConferencia(){
   html += `<button class="btn" onclick="confirmarImportacao()">Confirmar e lançar no estoque</button>
     <button class="btn-2" style="width:100%;padding:13px;margin-top:10px" onclick="nav('import')">Cancelar</button>`;
   c.innerHTML = html;
-  // preencher categorias nos selects de produtos novos
   carregarCategoriasNosSelects();
 }
 function ajustarFator(i, val){
@@ -431,7 +430,7 @@ async function darSaida(){
       body:JSON.stringify({id_produto:id,quantidade:qtd,motivo:document.getElementById('saida-motivo').value,observacao:document.getElementById('saida-obs').value})});
     toast(`Saída registrada. Estoque: ${r.estoque_atual}`, r.alerta_negativo?'err':'ok');
     document.getElementById('saida-qtd').value=''; document.getElementById('saida-obs').value='';
-    estoqueCache=[]; 
+    estoqueCache=[];
   }catch(e){ toast(e.message,'err'); }
 }
 

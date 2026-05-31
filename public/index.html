@@ -453,16 +453,38 @@ async function _loadQuagga(){
 async function _startScanner(containerId, onResult){
   _stopActiveScan();
 
-  // Caminho 1: Capacitor nativo (MLKit — melhor precisão)
+  // Caminho 1: Capacitor nativo (scanner de câmera nativa)
   const isNative = window.Capacitor?.isNativePlatform?.();
   if(isNative){
     const BS = window.Capacitor.Plugins.BarcodeScanner;
     const perm = await BS.checkPermission({force:true});
-    if(!perm.granted) throw new Error('Permissão de câmera negada.');
+    if(!perm.granted) throw new Error('Permissão de câmera negada. Acesse Configurações e permita a câmera.');
+
+    // Overlay com frame de mira + botão cancelar (aparece sobre a câmera)
+    const overlay = document.createElement('div');
+    overlay.id = '_scan_overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none';
+    overlay.innerHTML = `
+      <div style="width:72%;max-width:300px;aspect-ratio:3/2;border:3px solid #48c78e;border-radius:16px;box-shadow:0 0 0 4000px rgba(0,0,0,.55)"></div>
+      <p style="color:#e8efe9;margin-top:20px;font-size:14px;font-family:sans-serif;text-align:center">Aponte para o código de barras</p>
+      <button id="_scan_cancel" style="pointer-events:auto;margin-top:24px;background:#ef6f6f;color:#fff;border:none;border-radius:12px;padding:14px 44px;font-size:15px;font-weight:700;cursor:pointer">✕ Cancelar</button>`;
+    document.body.appendChild(overlay);
+
+    document.getElementById('_scan_cancel').addEventListener('click', ()=>_stopActiveScan());
+
     document.body.classList.add('scanner-active');
     BS.hideBackground();
-    _activeScan = {stop(){ BS.stopScan(); BS.showBackground(); document.body.classList.remove('scanner-active'); }};
-    const result = await BS.startScan();
+
+    _activeScan = {stop(){
+      BS.stopScan(); BS.showBackground();
+      document.body.classList.remove('scanner-active');
+      const ol = document.getElementById('_scan_overlay');
+      if(ol) ol.remove();
+    }};
+
+    const result = await BS.startScan({
+      targetedFormats: ['EAN_13','EAN_8','CODE_128','CODE_39','QR_CODE','DATA_MATRIX']
+    });
     _stopActiveScan();
     if(result.hasContent) onResult(result.content);
     return;

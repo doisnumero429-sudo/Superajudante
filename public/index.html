@@ -7,7 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Spline+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
 <style>
 :root{
   --bg:#0f1413; --surface:#161d1c; --surface2:#1e2726; --line:#2a3534;
@@ -78,8 +77,10 @@ nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:
 nav button{flex:1;background:none;color:var(--muted);padding:8px 2px;font-size:10.5px;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:4px}
 nav button.active{color:var(--accent)}
 nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
-#scanner{border-radius:12px;overflow:hidden;margin-top:14px;display:none}
-#scanner.show{display:block}
+.scanner-wrap{border-radius:12px;overflow:hidden;margin-top:14px;display:none;background:#111;position:relative}
+.scanner-wrap.show{display:block}
+.scanner-wrap video{width:100%;display:block}
+.scanner-wrap canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
 .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--line);
   color:var(--ink);padding:13px 20px;border-radius:12px;font-size:14px;z-index:100;box-shadow:var(--shadow);opacity:0;transition:opacity .3s;max-width:90%;text-align:center}
 .toast.show{opacity:1}
@@ -115,6 +116,8 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <label>Chave de acesso</label>
     <input class="chave-input" id="chave" inputmode="numeric" maxlength="54" placeholder="0000 0000 0000 … (44 números)">
     <div class="small muted" id="chave-count" style="margin-top:6px">0 / 44 dígitos</div>
+    <button class="btn-2" id="btn-scanner-nfe" style="width:100%;padding:13px;margin-top:10px" onclick="toggleScannerNFe()">📷 Escanear QR code da NF-e</button>
+    <div class="scanner-wrap" id="scanner-nfe"></div>
     <button class="btn" id="btn-buscar" onclick="buscarNfe()">Buscar nota</button>
     <div class="status-box" id="status-box"></div>
     <hr>
@@ -167,8 +170,8 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
   <div class="card">
     <h2 style="font-size:19px">Inventário</h2>
     <p class="muted small">Leia o código de barras ou digite.</p>
-    <button class="btn-2" style="width:100%;padding:13px;margin-top:12px" onclick="toggleScanner()">📷 Ler código de barras</button>
-    <div id="scanner"></div>
+    <button class="btn-2" id="btn-scanner-inv" style="width:100%;padding:13px;margin-top:12px" onclick="toggleScanner()">📷 Ler código de barras</button>
+    <div class="scanner-wrap" id="scanner"></div>
     <label>Código de barras</label>
     <input id="inv-ean" inputmode="numeric" placeholder="código" onchange="buscarPorEan()">
     <div id="inv-result"></div>
@@ -197,7 +200,7 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
 
 <script>
 const API = '';
-let confData = null, estoqueCache = [], scanner = null;
+let confData = null, estoqueCache = [], _activeScan = null;
 
 function toast(msg, type=''){
   const t = document.getElementById('toast');
@@ -215,6 +218,7 @@ const TITLES = {dash:['Painel','Visão geral'],import:['Importar NF-e','Buscar n
   estoque:['Estoque','Produtos'],saida:['Saída','Baixa manual'],inv:['Inventário','Contagem'],contas:['Contas a pagar','Financeiro']};
 
 function nav(v){
+  _stopActiveScan();
   document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
   document.getElementById('v-'+v).classList.add('active');
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
@@ -428,20 +432,111 @@ async function darSaida(){
   }catch(e){ toast(e.message,'err'); }
 }
 
+/* ===== SCANNER ENGINE ===== */
+function _stopActiveScan(){
+  if(_activeScan){ _activeScan.stop(); _activeScan=null; }
+}
+
+async function _loadQuagga(){
+  if(window.Quagga) return;
+  await new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdn.jsdelivr.net/npm/@ericblade/quagga2@1.8.4/dist/quagga.min.js';
+    s.onload=res; s.onerror=()=>rej(new Error('Falha ao carregar leitor. Verifique sua conexão.'));
+    document.head.appendChild(s);
+  });
+}
+
+async function _startScanner(containerId, onResult){
+  _stopActiveScan();
+  const el=document.getElementById(containerId);
+  el.innerHTML=''; el.classList.add('show');
+
+  if('BarcodeDetector' in window){
+    let detector;
+    try{ detector=new BarcodeDetector({formats:['ean_13','ean_8','code_128','code_39','qr_code']}); }
+    catch(e){ detector=new BarcodeDetector({formats:['ean_13','qr_code']}); }
+
+    let stream;
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
+    }catch(e){ el.classList.remove('show'); throw new Error('Câmera não autorizada.'); }
+
+    const video=document.createElement('video');
+    video.setAttribute('playsinline',''); video.muted=true; video.srcObject=stream;
+    el.appendChild(video); await video.play();
+
+    let running=true, last=0;
+    const loop=async()=>{
+      if(!running) return;
+      const now=Date.now();
+      if(now-last>150 && video.readyState>=2){
+        last=now;
+        try{
+          const codes=await detector.detect(video);
+          if(codes.length && running){ running=false; _stopActiveScan(); onResult(codes[0].rawValue); return; }
+        }catch(_){}
+      }
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+
+    _activeScan={stop(){
+      running=false; stream.getTracks().forEach(t=>t.stop());
+      el.classList.remove('show'); el.innerHTML='';
+    }};
+
+  } else {
+    try{ await _loadQuagga(); }catch(e){ el.classList.remove('show'); throw e; }
+
+    let detected=false;
+    await new Promise((res,rej)=>{
+      Quagga.init({
+        inputStream:{type:'LiveStream',target:el,constraints:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}},
+        decoder:{readers:['ean_reader','ean_8_reader','code_128_reader','code_39_reader'],multiple:false},
+        locate:true, frequency:10
+      }, err=>{ if(err){ el.classList.remove('show'); rej(new Error('Câmera não autorizada.')); } else { Quagga.start(); res(); } });
+    });
+
+    Quagga.onDetected(r=>{
+      if(detected) return;
+      const code=r.codeResult?.code; if(!code) return;
+      detected=true; _stopActiveScan(); onResult(code);
+    });
+
+    _activeScan={stop(){
+      try{ Quagga.stop(); }catch(_){}
+      el.classList.remove('show'); el.innerHTML='';
+    }};
+  }
+}
+
 /* INVENTÁRIO */
 function toggleScanner(){
-  const div = document.getElementById('scanner');
-  if(div.classList.contains('show')){ stopScanner(); return; }
-  div.classList.add('show');
-  scanner = new Html5Qrcode('scanner');
-  scanner.start({facingMode:'environment'}, {fps:10,qrbox:{width:250,height:120}},
-    (txt)=>{ document.getElementById('inv-ean').value=txt; stopScanner(); buscarPorEan(); },
-    ()=>{}).catch(e=>{ toast('Câmera indisponível: '+e,'err'); div.classList.remove('show'); });
+  const el=document.getElementById('scanner');
+  const btn=document.getElementById('btn-scanner-inv');
+  if(el.classList.contains('show')){ _stopActiveScan(); btn.textContent='📷 Ler código de barras'; return; }
+  btn.textContent='⏹ Parar scanner';
+  _startScanner('scanner', code=>{
+    btn.textContent='📷 Ler código de barras';
+    document.getElementById('inv-ean').value=code; buscarPorEan();
+  }).catch(e=>{ btn.textContent='📷 Ler código de barras'; toast(e.message,'err'); });
 }
-function stopScanner(){
-  const div = document.getElementById('scanner');
-  if(scanner){ scanner.stop().then(()=>scanner.clear()).catch(()=>{}); scanner=null; }
-  div.classList.remove('show');
+
+/* NF-e SCANNER */
+function toggleScannerNFe(){
+  const el=document.getElementById('scanner-nfe');
+  const btn=document.getElementById('btn-scanner-nfe');
+  if(el.classList.contains('show')){ _stopActiveScan(); btn.textContent='📷 Escanear QR code da NF-e'; return; }
+  btn.textContent='⏹ Parar scanner';
+  _startScanner('scanner-nfe', raw=>{
+    btn.textContent='📷 Escanear QR code da NF-e';
+    const m=raw.match(/\d{44}/);
+    if(!m){ toast('Código não reconhecido. Tente digitar a chave.','err'); return; }
+    chaveInput.value=m[0];
+    document.getElementById('chave-count').textContent='44 / 44 dígitos';
+    buscarNfe();
+  }).catch(e=>{ btn.textContent='📷 Escanear QR code da NF-e'; toast(e.message,'err'); });
 }
 async function buscarPorEan(){
   const ean = document.getElementById('inv-ean').value.trim();

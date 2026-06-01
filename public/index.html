@@ -152,8 +152,100 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <button class="btn-2 btn-sm" style="width:100%;padding:12px" onclick="nav('saida')">↓ Saída</button>
     <button class="btn-2 btn-sm" style="width:100%;padding:12px" onclick="nav('inv')">⌗ Inventário</button>
   </div>
-  <input id="busca-estoque" placeholder="Buscar produto…" oninput="filtrarEstoque()" style="margin-bottom:12px">
+  <input id="busca-estoque" placeholder="Buscar produto…" oninput="filtrarEstoque()" style="margin-bottom:8px">
+  <div id="est-filtros" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:8px;margin-bottom:8px;scrollbar-width:none"></div>
   <div class="card" id="estoque-list"><div class="empty">Carregando…</div></div>
+</section>
+
+<!-- DETALHE / EDIÇÃO DE PRODUTO -->
+<section class="view" id="v-produto">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+    <button class="btn-2 btn-sm" style="padding:8px 16px;flex-shrink:0" onclick="nav('estoque')">← Voltar</button>
+    <div id="prod-status-badge" style="font-size:13px"></div>
+  </div>
+  <div class="card">
+    <h2 id="prod-form-titulo" style="font-size:17px;margin-bottom:4px;word-break:break-word"></h2>
+    <p id="prod-faltando-msg" style="font-size:13px;color:var(--warn);margin-bottom:16px;min-height:0"></p>
+
+    <label>Nome do produto</label>
+    <p class="muted small" style="margin-bottom:6px">Nome usado dentro do Araçá Grill.</p>
+    <input id="prod-nome" placeholder="Ex.: Cerveja Heineken 600ml">
+
+    <label>Categoria</label>
+    <p class="muted small" style="margin-bottom:6px">Categoria usada para organizar produtos parecidos.</p>
+    <select id="prod-cat"><option value="">Categoria…</option></select>
+
+    <label>Unidade de controle</label>
+    <p class="muted small" style="margin-bottom:6px">Como este produto é contado no estoque. Ex.: UN, KG ou L.</p>
+    <select id="prod-unidade">
+      <option value="UN">UN — Unidade</option>
+      <option value="KG">KG — Quilograma</option>
+      <option value="L">L — Litro</option>
+      <option value="G">G — Grama</option>
+      <option value="ML">ML — Mililitro</option>
+      <option value="PCT">PCT — Pacote</option>
+      <option value="SC">SC — Saco</option>
+      <option value="DZ">DZ — Dúzia</option>
+      <option value="FD">FD — Fardo</option>
+    </select>
+
+    <label>Código de barras unitário</label>
+    <p class="muted small" style="margin-bottom:6px">Escaneie ou digite o código da unidade individual. Ex.: a garrafa, não a caixa.</p>
+    <div class="row">
+      <input id="prod-ean" placeholder="000000000000" inputmode="numeric" style="flex:1">
+      <button class="btn-2" style="padding:10px 14px;white-space:nowrap;flex-shrink:0" onclick="scanEanProduto()">📷 Ler</button>
+    </div>
+    <div id="scanner-produto" class="scanner-wrap"></div>
+
+    <label>Preço de venda <span class="muted small" style="font-weight:400">(opcional para ingredientes)</span></label>
+    <p class="muted small" style="margin-bottom:6px">Preço cobrado do cliente. Usado principalmente para bebidas.</p>
+    <input id="prod-preco" type="number" inputmode="decimal" placeholder="0,00" min="0" step="0.01">
+
+    <label>Estoque mínimo</label>
+    <p class="muted small" style="margin-bottom:6px">Quando o estoque ficar abaixo desse número, o sistema mostra um aviso.</p>
+    <input id="prod-minimo" type="number" inputmode="decimal" placeholder="0" min="0">
+
+    <label>Observações</label>
+    <p class="muted small" style="margin-bottom:6px">Anotações internas sobre este produto.</p>
+    <input id="prod-obs" placeholder="opcional">
+
+    <!-- Dados avançados (somente consulta) -->
+    <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:16px">
+      <button id="btn-dados-av" class="btn-2 btn-sm" style="width:100%;padding:11px;text-align:left" onclick="toggleDadosAv()">▸ Dados avançados</button>
+      <div id="prod-av" style="display:none;margin-top:14px">
+        <p class="muted small" style="margin-bottom:12px">Esses dados vêm da nota fiscal e dos mapeamentos. São apenas para consulta.</p>
+
+        <label class="muted small">Descrição original da NF-e</label>
+        <input id="prod-desc-nf" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
+
+        <label class="muted small">Código de barras da NF-e</label>
+        <input id="prod-ean-nf" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
+
+        <label class="muted small">Código do produto na NF-e</label>
+        <input id="prod-cod-nf" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
+
+        <label class="muted small">CNPJ do fornecedor</label>
+        <input id="prod-cnpj" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
+
+        <label class="muted small">Último custo de compra</label>
+        <input id="prod-ultimo-custo" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
+
+        <label class="muted small">Custo médio atual</label>
+        <input id="prod-custo-medio" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
+
+        <label class="muted small">Embalagens de compra</label>
+        <div id="prod-embs" class="muted small" style="margin-bottom:14px;line-height:1.8"><div class="spinner" style="display:inline-block;width:14px;height:14px"></div></div>
+
+        <label class="muted small">Mapeamentos de fornecedor</label>
+        <div id="prod-pf" class="muted small" style="margin-bottom:14px;line-height:1.8"><div class="spinner" style="display:inline-block;width:14px;height:14px"></div></div>
+
+        <label class="muted small">Aliases (nomes alternativos)</label>
+        <div id="prod-aliases" class="muted small" style="line-height:1.8"><div class="spinner" style="display:inline-block;width:14px;height:14px"></div></div>
+      </div>
+    </div>
+
+    <button class="btn" style="margin-top:22px;width:100%;padding:15px;font-size:15px" onclick="salvarProduto()">Salvar alterações</button>
+  </div>
 </section>
 
 <!-- ENTRADA MANUAL -->
@@ -331,7 +423,7 @@ function fmtDataHora(s){
 }
 const hojeISO = () => { const d=new Date(); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; };
 const TITLES = {dash:['Painel','Visão geral'],import:['Importar NF-e','Buscar nota'],conf:['Conferência','Revisar antes de lançar'],
-  estoque:['Estoque','Produtos'],entrada:['Entrada manual','Sem nota fiscal'],saida:['Saída','Baixa de estoque'],
+  estoque:['Estoque','Produtos'],produto:['Produto','Editar cadastro'],entrada:['Entrada manual','Sem nota fiscal'],saida:['Saída','Baixa de estoque'],
   inv:['Inventário','Contagem'],contas:['Contas a pagar','Financeiro'],config:['Configurações','Ajustes e categorias']};
 
 function nav(v){
@@ -358,8 +450,8 @@ async function loadDash(){
       <div class="stat ${d.produtos_estoque_baixo>0?'alert':''}"><div class="n">${d.produtos_estoque_baixo}</div><div class="l">Estoque baixo</div></div>
       <div class="stat"><div class="n" style="font-size:22px">${brl(d.valor_estimado_estoque)}</div><div class="l">Valor em estoque</div></div>
       <div class="stat"><div class="n">${d.notas_no_mes}</div><div class="l">Notas no mês</div></div>
-      <div class="stat ${d.contas_vencidas>0?'alert':''}"><div class="n">${d.contas_vencidas}</div><div class="l">Contas vencidas</div></div>
-      <div class="stat warn"><div class="n">${d.contas_vencendo_7dias}</div><div class="l">Vencem em 7 dias</div></div>
+      <div class="stat ${d.contas_vencidas>0?'alert':''}" style="cursor:pointer" onclick="navContas('vencidas')"><div class="n">${d.contas_vencidas}</div><div class="l">Contas vencidas ›</div></div>
+      <div class="stat warn" style="cursor:pointer" onclick="navContas('7dias')"><div class="n">${d.contas_vencendo_7dias}</div><div class="l">Vencem em 7 dias ›</div></div>
       <div class="stat"><div class="n" style="font-size:22px">${brl(d.total_em_aberto)}</div><div class="l">Total em aberto</div></div>
       <div class="stat ${d.contas_pendentes_info>0?'warn':''}"><div class="n">${d.contas_pendentes_info}</div><div class="l">Pendentes de info</div></div>`;
     document.getElementById('dash-baixo').innerHTML = d.lista_estoque_baixo.length
@@ -614,28 +706,206 @@ async function confirmarImportacao(){
 }
 
 /* ESTOQUE */
+let estoqueFiltro = '';
+let produtoEditCtx = null;
+
+// Retorna { nivel: 'ok'|'warn'|'err', faltando: string[] }
+function statusCadastro(p){
+  if(!p.nome_interno||!p.categoria_id||!p.unidade_estoque){
+    const f=[];
+    if(!p.nome_interno) f.push('nome');
+    if(!p.categoria_id) f.push('categoria');
+    if(!p.unidade_estoque) f.push('unidade');
+    return {nivel:'err', faltando:f};
+  }
+  const warn=[];
+  if(!p.codigo_barras_unitario) warn.push('código de barras unitário');
+  if(!p.estoque_minimo||parseFloat(p.estoque_minimo)<=0) warn.push('estoque mínimo');
+  if(String(p.confirmado||'NAO').toUpperCase()!=='SIM') warn.push('não confirmado');
+  const catNome = catCache ? (catCache.find(c=>c.id_categoria===p.categoria_id)?.nome_categoria||'') : '';
+  if(/bebida|drink|cerv|refri|suco|água|agua|chope|vinho|dose|lata/i.test(catNome)){
+    if(!p.preco_venda||parseFloat(p.preco_venda)<=0) warn.push('preço de venda');
+  }
+  return warn.length ? {nivel:'warn', faltando:warn} : {nivel:'ok', faltando:[]};
+}
+
+function badgeEstoque(p){
+  const s=statusCadastro(p);
+  if(s.nivel==='err') return '🔴';
+  if(s.nivel==='warn') return '🟡';
+  return '✅';
+}
+
 async function loadEstoque(){
   try{
-    estoqueCache = (await api('/api/listar?aba=Produtos')).rows.filter(p=>String(p.ativo).toUpperCase()==='SIM');
-    renderEstoque(estoqueCache);
+    const [prodData] = await Promise.all([
+      api('/api/listar?aba=Produtos'),
+      catCache ? Promise.resolve() : api('/api/admin?recurso=categorias').then(r=>{ catCache=r.rows; }),
+    ]);
+    estoqueCache = prodData.rows.filter(p=>String(p.ativo).toUpperCase()==='SIM');
+    renderFiltros();
+    filtrarEstoque();
   }catch(e){ document.getElementById('estoque-list').innerHTML=`<div class="empty">${e.message}</div>`; }
 }
+
+function renderFiltros(){
+  const chips=[
+    {id:'',label:'Todos'},
+    {id:'sem-ean',label:'Falta EAN'},
+    {id:'abaixo-min',label:'Abaixo do mín.'},
+    {id:'incompleto',label:'Incompleto'},
+    {id:'nao-conf',label:'Não confirmado'},
+  ];
+  if(catCache) catCache.filter(c=>String(c.ativo||'SIM').toUpperCase()==='SIM')
+    .forEach(c=>chips.push({id:'cat:'+c.id_categoria, label:c.nome_categoria}));
+  document.getElementById('est-filtros').innerHTML = chips.map(c=>
+    `<button class="chip est-chip${estoqueFiltro===c.id?' on':''}" onclick="setEstoqueFiltro(${JSON.stringify(c.id)})">${esc(c.label)}</button>`
+  ).join('');
+}
+
+function setEstoqueFiltro(f){
+  estoqueFiltro=f;
+  renderFiltros();
+  filtrarEstoque();
+}
+
 function renderEstoque(list){
-  const el = document.getElementById('estoque-list');
-  if(!list.length){ el.innerHTML='<div class="empty">Nenhum produto.</div>'; return; }
-  el.innerHTML = list.map(p=>{
-    const baixo = p.estoque_minimo!=='' && parseFloat(p.estoque_atual)<=parseFloat(p.estoque_minimo);
-    return `<div class="list-row"><div><div class="t">${p.nome_interno||p.descricao_original_nf}</div>
-      <div class="s">Custo méd. ${brl(p.custo_medio)} · mín ${p.estoque_minimo||'—'}</div></div>
-      <div class="v" style="${baixo?'color:var(--danger)':''}">${p.estoque_atual} <span class="muted small">${p.unidade_estoque||''}</span></div></div>`;
+  const el=document.getElementById('estoque-list');
+  if(!list.length){ el.innerHTML='<div class="empty">Nenhum produto encontrado.</div>'; return; }
+  el.innerHTML=list.map(p=>{
+    const s=statusCadastro(p);
+    const baixo=p.estoque_minimo!==''&&parseFloat(p.estoque_minimo)>0&&parseFloat(p.estoque_atual)<=parseFloat(p.estoque_minimo);
+    const sub=s.faltando.length ? `Falta: ${s.faltando.slice(0,2).join(', ')}` : `Custo méd. ${brl(p.custo_medio)} · mín ${p.estoque_minimo||'—'}`;
+    return `<div class="list-row" style="cursor:pointer" onclick="abrirProduto('${p.id_produto}')">
+      <div style="flex:1;min-width:0"><div class="t">${badgeEstoque(p)} ${esc(p.nome_interno||p.descricao_original_nf||'—')}</div>
+      <div class="s">${sub}</div></div>
+      <div class="v" style="${baixo?'color:var(--danger)':''}">
+        ${arred(p.estoque_atual)} <span class="muted small">${p.unidade_estoque||''}</span></div></div>`;
   }).join('');
 }
+
 function filtrarEstoque(){
-  const q = document.getElementById('busca-estoque').value.toLowerCase();
-  renderEstoque(estoqueCache.filter(p=>(p.nome_interno||p.descricao_original_nf||'').toLowerCase().includes(q)));
+  const q=document.getElementById('busca-estoque').value.toLowerCase();
+  let list=estoqueCache.filter(p=>(p.nome_interno||p.descricao_original_nf||'').toLowerCase().includes(q));
+  if(estoqueFiltro==='sem-ean') list=list.filter(p=>!p.codigo_barras_unitario);
+  else if(estoqueFiltro==='abaixo-min') list=list.filter(p=>p.estoque_minimo&&parseFloat(p.estoque_minimo)>0&&parseFloat(p.estoque_atual)<=parseFloat(p.estoque_minimo));
+  else if(estoqueFiltro==='incompleto') list=list.filter(p=>statusCadastro(p).nivel!=='ok');
+  else if(estoqueFiltro==='nao-conf') list=list.filter(p=>String(p.confirmado||'NAO').toUpperCase()!=='SIM');
+  else if(estoqueFiltro.startsWith('cat:')) list=list.filter(p=>p.categoria_id===estoqueFiltro.slice(4));
+  renderEstoque(list);
+}
+
+/* PRODUTO DETALHE / EDIÇÃO */
+async function abrirProduto(id){
+  const prod=estoqueCache.find(p=>p.id_produto===id);
+  if(!prod){ toast('Produto não encontrado.','err'); return; }
+  produtoEditCtx={prod, embs:[], pf:[], aliases:[]};
+
+  // Campos principais
+  document.getElementById('prod-form-titulo').textContent=prod.nome_interno||prod.descricao_original_nf||'';
+  document.getElementById('prod-nome').value=prod.nome_interno||'';
+  await carregarCatSelect('prod-cat', false);
+  document.getElementById('prod-cat').value=prod.categoria_id||'';
+  const uSel=document.getElementById('prod-unidade');
+  uSel.value=prod.unidade_estoque||'UN';
+  if(prod.unidade_estoque && !uSel.value){
+    const opt=document.createElement('option'); opt.value=prod.unidade_estoque; opt.textContent=prod.unidade_estoque;
+    uSel.insertBefore(opt, uSel.firstChild); uSel.value=prod.unidade_estoque;
+  }
+  document.getElementById('prod-ean').value=prod.codigo_barras_unitario||'';
+  document.getElementById('prod-preco').value=prod.preco_venda||'';
+  document.getElementById('prod-minimo').value=prod.estoque_minimo||'';
+  document.getElementById('prod-obs').value=prod.observacoes||'';
+
+  // Status badge
+  const s=statusCadastro(prod);
+  const labels={ok:'✅ Cadastro completo',warn:'🟡 Falta informação importante',err:'🔴 Falta informação obrigatória'};
+  document.getElementById('prod-status-badge').textContent=labels[s.nivel];
+  document.getElementById('prod-faltando-msg').textContent=s.faltando.length?`Falta: ${s.faltando.join(', ')}` : '';
+
+  // Dados avançados (leitura — campos fixos do produto)
+  document.getElementById('prod-desc-nf').value=prod.descricao_original_nf||'';
+  document.getElementById('prod-ean-nf').value=prod.codigo_barras||'';
+  document.getElementById('prod-cod-nf').value=prod.codigo_produto_nf||'';
+  document.getElementById('prod-cnpj').value=prod.cnpj_fornecedor||'';
+  document.getElementById('prod-ultimo-custo').value=prod.ultimo_custo_unitario?brl(prod.ultimo_custo_unitario):'';
+  document.getElementById('prod-custo-medio').value=prod.custo_medio?brl(prod.custo_medio):'';
+
+  // Colapsar dados avançados
+  document.getElementById('prod-av').style.display='none';
+  document.getElementById('btn-dados-av').textContent='▸ Dados avançados';
+
+  nav('produto');
+
+  // Carrega embalagens, mapeamentos e aliases de forma assíncrona (não bloqueia a navegação)
+  try{
+    const [embData, pfData, alData] = await Promise.all([
+      api('/api/admin?recurso=embalagens&id_produto='+encodeURIComponent(id)),
+      api('/api/listar?aba=Produto_Fornecedor'),
+      api('/api/listar?aba=Aliases_Produto'),
+    ]);
+    produtoEditCtx.embs=embData.rows||[];
+    produtoEditCtx.pf=(pfData.rows||[]).filter(r=>r.id_produto===id&&String(r.ativo||'SIM').toUpperCase()==='SIM');
+    produtoEditCtx.aliases=(alData.rows||[]).filter(r=>r.id_produto===id&&String(r.ativo||'SIM').toUpperCase()==='SIM');
+
+    document.getElementById('prod-embs').innerHTML=produtoEditCtx.embs.length
+      ? produtoEditCtx.embs.map(e=>`<div>${esc(e.descricao||e.sigla)} — fator ${e.fator} ${e.unidade_base||''}</div>`).join('')
+      : '<em>Nenhuma embalagem cadastrada</em>';
+    document.getElementById('prod-pf').innerHTML=produtoEditCtx.pf.length
+      ? produtoEditCtx.pf.map(m=>`<div>${esc(m.nome_fornecedor||m.cnpj_fornecedor||'?')} · cód. ${m.codigo_produto_nf}</div>`).join('')
+      : '<em>Sem mapeamentos de fornecedor</em>';
+    document.getElementById('prod-aliases').innerHTML=produtoEditCtx.aliases.length
+      ? produtoEditCtx.aliases.map(a=>`<div>${esc(a.alias)}</div>`).join('')
+      : '<em>Sem aliases cadastrados</em>';
+  }catch{ /* dados avançados opcionais */ }
+}
+
+function toggleDadosAv(){
+  const el=document.getElementById('prod-av');
+  const btn=document.getElementById('btn-dados-av');
+  const abrir=el.style.display==='none';
+  el.style.display=abrir?'block':'none';
+  btn.textContent=abrir?'▾ Dados avançados':'▸ Dados avançados';
+}
+
+async function scanEanProduto(){
+  try{
+    await _startScanner('scanner-produto', code=>{
+      document.getElementById('prod-ean').value=code;
+      toast('Código lido: '+code,'ok');
+    });
+  }catch(e){ toast(e.message,'err'); }
+}
+
+async function salvarProduto(){
+  if(!produtoEditCtx){ toast('Nenhum produto aberto.','err'); return; }
+  const id=produtoEditCtx.prod.id_produto;
+  const payload={
+    id_produto:id,
+    nome_interno:document.getElementById('prod-nome').value.trim(),
+    categoria_id:document.getElementById('prod-cat').value,
+    unidade_estoque:document.getElementById('prod-unidade').value,
+    codigo_barras_unitario:document.getElementById('prod-ean').value.trim(),
+    preco_venda:parseFloat(document.getElementById('prod-preco').value)||0,
+    estoque_minimo:parseFloat(document.getElementById('prod-minimo').value)||0,
+    observacoes:document.getElementById('prod-obs').value.trim(),
+  };
+  if(!payload.nome_interno){ toast('Informe o nome do produto.','err'); return; }
+  try{
+    const r=await api('/api/admin?recurso=produto-editar',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    // Atualiza cache local
+    const idx=estoqueCache.findIndex(p=>p.id_produto===id);
+    if(idx>=0){ Object.assign(estoqueCache[idx], payload); if(r.confirmado) estoqueCache[idx].confirmado=r.confirmado; }
+    toast('Produto atualizado ✓','ok');
+    nav('estoque');
+  }catch(e){ toast(e.message,'err'); }
 }
 /* embalagens por produto (cache) */
 let embCache = {};
+let contasFiltro = '';
+const FORMAS_PAGAR = ['Dinheiro','Pix','Cartão de Débito','Cartão de Crédito','TED/Transferência','Boleto'];
+let pagCtx = {id:'', forma:'', data:''};
 async function getEmbalagens(idProduto){
   if(!idProduto) return [];
   if(embCache[idProduto]) return embCache[idProduto];
@@ -976,13 +1246,13 @@ async function ajustarInventario(id){
 }
 
 /* CONTAS */
+function navContas(filtro){ contasFiltro = filtro || ''; nav('contas'); }
+
 async function loadContas(){
   try{
     const rows = (await api('/api/listar?aba=Contas_Pagar')).rows;
     const el = document.getElementById('contas-list');
     const hoje = new Date(); hoje.setHours(0,0,0,0);
-    const abertas = rows.filter(c=>['ABERTO','PENDENTE_INFO'].includes(String(c.status).toUpperCase()));
-    if(!abertas.length){ el.innerHTML='<div class="empty">Nenhuma conta em aberto.</div>'; return; }
     const cat = (c)=>{
       if(String(c.status).toUpperCase()==='PENDENTE_INFO') return {k:'pend',badge:'<span class="badge b-wait">sem vencimento</span>'};
       const v=new Date(c.vencimento);
@@ -994,18 +1264,77 @@ async function loadContas(){
       if(v<=d7) return {k:'7',badge:'<span class="badge b-info">7 dias</span>'};
       return {k:'fut',badge:''};
     };
-    el.innerHTML = '<div class="card">' + abertas.map(c=>{
+    let abertas = rows.filter(c=>['ABERTO','PENDENTE_INFO'].includes(String(c.status).toUpperCase()));
+
+    // Filtro vindo do dashboard
+    let cabecalho = '';
+    if(contasFiltro === 'vencidas'){
+      abertas = abertas.filter(c=>cat(c).k==='venc');
+      cabecalho = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-weight:600;color:var(--danger)">Contas vencidas</span>
+        <button class="btn-2 btn-sm" style="padding:6px 14px" onclick="navContas('')">Ver todas</button></div>`;
+    } else if(contasFiltro === '7dias'){
+      abertas = abertas.filter(c=>cat(c).k==='7'||cat(c).k==='hoje');
+      cabecalho = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-weight:600;color:var(--warn)">Vencem em 7 dias</span>
+        <button class="btn-2 btn-sm" style="padding:6px 14px" onclick="navContas('')">Ver todas</button></div>`;
+    }
+
+    if(!abertas.length){
+      el.innerHTML = cabecalho + '<div class="empty">Nenhuma conta encontrada.</div>';
+      return;
+    }
+    el.innerHTML = cabecalho + '<div class="card">' + abertas.map(c=>{
       const m=cat(c);
-      return `<div class="list-row"><div><div class="t">${c.descricao}</div>
-        <div class="s">Venc. ${fmtData(c.vencimento)} · ${c.forma_pagamento} ${m.badge}</div></div>
-        <div style="text-align:right"><div class="v">${brl(c.valor)}</div>
-        <button class="btn-2 btn-sm" style="margin-top:6px;padding:6px 12px;font-size:12px" onclick="pagar('${c.id_conta}')">Pagar</button></div></div>`;
+      return `<div class="list-row"><div style="flex:1;min-width:0"><div class="t">${esc(c.descricao||'—')}</div>
+        <div class="s">Venc. ${fmtData(c.vencimento)} · ${c.forma_pagamento||'—'} ${m.badge}</div></div>
+        <div style="text-align:right;flex-shrink:0;margin-left:12px"><div class="v">${brl(c.valor)}</div>
+        <button class="btn-2 btn-sm" style="margin-top:6px;padding:6px 12px;font-size:12px"
+          onclick="abrirPagamento('${c.id_conta}','${esc(c.descricao||'—')}',${parseFloat(c.valor)||0})">Pagar</button></div></div>`;
     }).join('') + '</div>';
   }catch(e){ document.getElementById('contas-list').innerHTML=`<div class="empty">${e.message}</div>`; }
 }
-async function pagar(id){
-  try{ await api('/api/contas/pagar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id_conta:id})});
-    toast('Conta marcada como paga ✓','ok'); loadContas();
+
+/* MODAL DE PAGAMENTO */
+function abrirPagamento(id, desc, valor){
+  pagCtx = {id, forma:'', data:''};
+  document.getElementById('pag-titulo').textContent = desc;
+  document.getElementById('pag-valor').textContent = brl(valor);
+  document.getElementById('pag-formas').innerHTML = FORMAS_PAGAR.map(f=>
+    `<button class="btn-2 btn-sm" style="padding:8px 14px;font-size:13px" onclick="setPagForma('${f}',this)">${f}</button>`
+  ).join('');
+  document.getElementById('pag-data').value = '';
+  document.getElementById('pag-btn-hoje').className = 'btn';
+  document.getElementById('pag-btn-hoje').style.cssText = 'white-space:nowrap;padding:10px 18px';
+  document.getElementById('modal-pagamento').style.display = 'flex';
+}
+function fecharPagamento(){ document.getElementById('modal-pagamento').style.display = 'none'; }
+function setPagForma(f, btn){
+  pagCtx.forma = f;
+  document.getElementById('pag-formas').querySelectorAll('button').forEach(b=>{
+    b.className='btn-2 btn-sm'; b.style.cssText='padding:8px 14px;font-size:13px';
+  });
+  btn.className='btn btn-sm'; btn.style.cssText='padding:8px 14px;font-size:13px';
+}
+function setPagHoje(){
+  pagCtx.data = '';
+  document.getElementById('pag-data').value = '';
+  document.getElementById('pag-btn-hoje').className = 'btn';
+}
+function setPagDataCustom(v){
+  if(!v) return;
+  pagCtx.data = v;
+  document.getElementById('pag-btn-hoje').className = 'btn-2';
+}
+async function confirmarPagamento(){
+  if(!pagCtx.forma){ toast('Selecione a forma de pagamento.','err'); return; }
+  const payload = {id_conta:pagCtx.id, forma_pagamento:pagCtx.forma};
+  if(pagCtx.data) payload.data_pagamento = pagCtx.data;
+  try{
+    await api('/api/contas/pagar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    fecharPagamento();
+    toast('Pagamento registrado ✓','ok');
+    loadContas();
   }catch(e){ toast(e.message,'err'); }
 }
 
@@ -1214,5 +1543,29 @@ async function importarTreino(substituir){
 
 loadDash();
 </script>
+
+<!-- Modal de pagamento -->
+<div id="modal-pagamento" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.65);align-items:flex-end;justify-content:center" onclick="if(event.target===this)fecharPagamento()">
+  <div style="background:var(--surface);width:100%;max-width:560px;border-radius:20px 20px 0 0;padding:24px 20px 36px">
+    <div style="width:40px;height:4px;background:var(--line);border-radius:4px;margin:0 auto 20px"></div>
+    <div class="t" id="pag-titulo" style="font-size:15px;font-weight:600;margin-bottom:2px"></div>
+    <div id="pag-valor" style="font-size:24px;font-weight:700;color:var(--accent);margin-bottom:20px"></div>
+
+    <label style="font-size:13px;color:var(--muted);font-weight:600;letter-spacing:.05em;text-transform:uppercase">Forma de pagamento</label>
+    <div id="pag-formas" style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 20px"></div>
+
+    <label style="font-size:13px;color:var(--muted);font-weight:600;letter-spacing:.05em;text-transform:uppercase">Data do pagamento</label>
+    <div style="display:flex;gap:8px;margin:10px 0 24px;align-items:center">
+      <button id="pag-btn-hoje" class="btn" style="white-space:nowrap;padding:10px 18px" onclick="setPagHoje()">Hoje</button>
+      <div style="color:var(--muted);font-size:13px">ou</div>
+      <input id="pag-data" type="date" style="flex:1;background:var(--surface2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:14px" oninput="setPagDataCustom(this.value)">
+    </div>
+
+    <div style="display:flex;gap:10px">
+      <button class="btn-2" style="flex:1;padding:13px" onclick="fecharPagamento()">Cancelar</button>
+      <button class="btn" style="flex:2;padding:13px;font-size:15px" onclick="confirmarPagamento()">Confirmar pagamento</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

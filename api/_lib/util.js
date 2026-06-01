@@ -1,6 +1,28 @@
 // api/_lib/util.js
 
+// Cabecalhos CORS — o app nativo (Capacitor) roda na origem https://localhost
+// e chama a API em superajudante.vercel.app (cross-origin). Sem isto o webview
+// bloqueia a resposta e o fetch falha com "Failed to fetch".
+export function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Max-Age', '86400');
+}
+
+// Responde a requisicao de preflight (OPTIONS) e devolve true se ja tratou.
+// Deve ser a 1a linha de cada handler: if (preflight(req, res)) return;
+export function preflight(req, res) {
+  setCors(res);
+  if (req.method === 'OPTIONS') {
+    res.status(204).end();
+    return true;
+  }
+  return false;
+}
+
 export function json(res, status, data) {
+  setCors(res);
   res.status(status).setHeader('Content-Type', 'application/json');
   res.send(JSON.stringify(data));
 }

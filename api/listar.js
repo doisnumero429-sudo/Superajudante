@@ -1,9 +1,10 @@
 // api/listar.js
 // GET /api/listar?aba=Produtos -> retorna as linhas da aba.
 import { readRows, TABLES } from './_lib/db.js';
-import { json } from './_lib/util.js';
+import { json, preflight } from './_lib/util.js';
 
 export default async function handler(req, res) {
+  if (preflight(req, res)) return;
   try {
     const aba = req.query?.aba || new URL(req.url, 'http://x').searchParams.get('aba');
     if (!aba || !TABLES[aba]) {

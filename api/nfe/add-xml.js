@@ -7,9 +7,10 @@
 import { addXml } from '../_lib/meudanfe.js';
 import { parseNfe, descreverFormaPagamento } from '../_lib/parser.js';
 import { readRows, readConfig } from '../_lib/db.js';
-import { json, readBody } from '../_lib/util.js';
+import { json, preflight, readBody } from '../_lib/util.js';
 
 export default async function handler(req, res) {
+  if (preflight(req, res)) return;
   if (req.method !== 'POST') return json(res, 405, { erro: 'Metodo nao permitido' });
   try {
     const body = await readBody(req);

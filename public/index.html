@@ -167,9 +167,11 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <button class="btn-2 btn-sm" style="padding:8px 16px;flex-shrink:0" onclick="nav('estoque')">← Voltar</button>
     <div id="prod-status-badge" style="font-size:13px"></div>
   </div>
+
+  <!-- Formulário editável -->
   <div class="card">
-    <div id="prod-inativo-banner" style="display:none;background:#fff8e1;border:1px solid #f9a825;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px">
-      <b>⚠ Produto inativo.</b> Não aparece no estoque e não é usado para reconhecer notas fiscais nem no treinamento com ChatGPT.
+    <div id="prod-inativo-banner" style="display:none;background:rgba(239,111,111,.1);border:1px solid rgba(239,111,111,.4);border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;color:var(--danger)">
+      <b>⚠ Produto inativo.</b> Não aparece no estoque e não é usado para reconhecer notas fiscais.
     </div>
     <h2 id="prod-form-titulo" style="font-size:17px;margin-bottom:4px;word-break:break-word"></h2>
     <p id="prod-faltando-msg" style="font-size:13px;color:var(--warn);margin-bottom:16px;min-height:0"></p>
@@ -179,11 +181,10 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <input id="prod-nome" placeholder="Ex.: Cerveja Heineken 600ml">
 
     <label>Categoria</label>
-    <p class="muted small" style="margin-bottom:6px">Categoria usada para organizar produtos parecidos.</p>
     <select id="prod-cat"><option value="">Categoria…</option></select>
 
     <label>Unidade de controle</label>
-    <p class="muted small" style="margin-bottom:6px">Como este produto é contado no estoque. Ex.: UN, KG ou L.</p>
+    <p class="muted small" style="margin-bottom:6px">Como este produto é contado. Ex.: UN, KG ou L.</p>
     <select id="prod-unidade">
       <option value="UN">UN — Unidade</option>
       <option value="KG">KG — Quilograma</option>
@@ -197,7 +198,7 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     </select>
 
     <label>Código de barras unitário</label>
-    <p class="muted small" style="margin-bottom:6px">Escaneie ou digite o código da unidade individual. Ex.: a garrafa, não a caixa.</p>
+    <p class="muted small" style="margin-bottom:6px">Código da unidade individual (garrafa, não a caixa).</p>
     <div class="row">
       <input id="prod-ean" placeholder="000000000000" inputmode="numeric" style="flex:1">
       <button class="btn-2" style="padding:10px 14px;white-space:nowrap;flex-shrink:0" onclick="scanEanProduto()">📷 Ler</button>
@@ -205,66 +206,88 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <div id="scanner-produto" class="scanner-wrap"></div>
 
     <label>Preço de venda <span class="muted small" style="font-weight:400">(opcional para ingredientes)</span></label>
-    <p class="muted small" style="margin-bottom:6px">Preço cobrado do cliente. Usado principalmente para bebidas.</p>
     <input id="prod-preco" type="number" inputmode="decimal" placeholder="0,00" min="0" step="0.01">
 
     <label>Estoque mínimo</label>
-    <p class="muted small" style="margin-bottom:6px">Quando o estoque ficar abaixo desse número, o sistema mostra um aviso.</p>
+    <p class="muted small" style="margin-bottom:6px">Quando chegar nesse número o sistema avisa.</p>
     <input id="prod-minimo" type="number" inputmode="decimal" placeholder="0" min="0">
 
     <label>Observações</label>
-    <p class="muted small" style="margin-bottom:6px">Anotações internas sobre este produto.</p>
     <input id="prod-obs" placeholder="opcional">
 
     <label>Produto de teste</label>
-    <p class="muted small" style="margin-bottom:6px">Marque como SIM quando criado apenas para teste. Produtos de teste não são enviados ao ChatGPT nem usados para reconhecer NF-es.</p>
+    <p class="muted small" style="margin-bottom:6px">Produtos de teste não vão ao ChatGPT nem reconhecem NF-es.</p>
     <select id="prod-teste">
       <option value="NAO">NÃO — produto real</option>
       <option value="SIM">SIM — produto de teste</option>
     </select>
 
-    <!-- Dados avançados (somente consulta) -->
-    <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:16px">
-      <button id="btn-dados-av" class="btn-2 btn-sm" style="width:100%;padding:11px;text-align:left" onclick="toggleDadosAv()">▸ Dados avançados</button>
-      <div id="prod-av" style="display:none;margin-top:14px">
-        <p class="muted small" style="margin-bottom:12px">Esses dados vêm da nota fiscal e dos mapeamentos. São apenas para consulta.</p>
-
-        <label class="muted small">Descrição original da NF-e</label>
-        <input id="prod-desc-nf" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
-
-        <label class="muted small">Código de barras da NF-e</label>
-        <input id="prod-ean-nf" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
-
-        <label class="muted small">Código do produto na NF-e</label>
-        <input id="prod-cod-nf" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
-
-        <label class="muted small">CNPJ do fornecedor</label>
-        <input id="prod-cnpj" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
-
-        <label class="muted small">Último custo de compra</label>
-        <input id="prod-ultimo-custo" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
-
-        <label class="muted small">Custo médio atual</label>
-        <input id="prod-custo-medio" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
-
-        <label class="muted small">Embalagens de compra</label>
-        <div id="prod-embs" class="muted small" style="margin-bottom:14px;line-height:1.8"><div class="spinner" style="display:inline-block;width:14px;height:14px"></div></div>
-
-        <label class="muted small">Mapeamentos de fornecedor</label>
-        <div id="prod-pf" class="muted small" style="margin-bottom:14px;line-height:1.8"><div class="spinner" style="display:inline-block;width:14px;height:14px"></div></div>
-
-        <label class="muted small">Aliases (nomes alternativos)</label>
-        <div id="prod-aliases" class="muted small" style="line-height:1.8"><div class="spinner" style="display:inline-block;width:14px;height:14px"></div></div>
-      </div>
-    </div>
-
     <button class="btn" style="margin-top:22px;width:100%;padding:15px;font-size:15px" onclick="salvarProduto()">Salvar alterações</button>
     <button id="btn-reativar-prod" class="btn" style="display:none;margin-top:10px;width:100%;padding:15px;font-size:15px;background:#2e7d32;border-color:#2e7d32" onclick="reativarProduto()">✅ Reativar produto</button>
+  </div>
 
-    <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
-      <p class="muted small" style="margin-bottom:10px">Use esta opção para remover produtos cadastrados por teste ou erro. Se o produto já tiver histórico, ele será apenas inativado para não quebrar movimentações antigas.</p>
-      <button class="btn-2" style="width:100%;padding:13px;color:var(--danger,#d32f2f);border-color:var(--danger,#d32f2f)" onclick="excluirProduto()">🗑 Excluir produto</button>
+  <!-- Custos e estoque (leitura) -->
+  <div class="card" style="margin-top:0">
+    <div class="sec-title" style="margin-top:0;margin-bottom:10px">Estoque e custos</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+      <div><div class="muted small">Estoque atual</div><b id="prod-estoque-vis" style="font-family:Fraunces;font-size:18px">—</b></div>
+      <div><div class="muted small">Custo médio</div><b id="prod-custo-vis" style="font-family:Fraunces;font-size:18px">—</b></div>
+      <div><div class="muted small">Último custo</div><b id="prod-ultimo-custo-vis" style="font-family:Fraunces;font-size:18px">—</b></div>
     </div>
+    <div id="prod-confirmado-vis" style="margin-top:12px"></div>
+    <!-- campos ocultos mantidos para compatibilidade com JS legado -->
+    <input id="prod-ultimo-custo" type="hidden">
+    <input id="prod-custo-medio" type="hidden">
+  </div>
+
+  <!-- Embalagens -->
+  <div class="card" style="margin-top:0">
+    <div class="sec-title" style="margin-top:0;margin-bottom:8px">Embalagens cadastradas</div>
+    <div id="prod-embs-vis"><div class="muted small">Carregando…</div></div>
+    <!-- oculto para compatibilidade -->
+    <div id="prod-embs" style="display:none"></div>
+  </div>
+
+  <!-- Fornecedores e aliases -->
+  <div class="card" style="margin-top:0">
+    <button id="btn-mapa-av" class="btn-2 btn-sm" style="width:100%;padding:11px;text-align:left;font-weight:500" onclick="toggleMapaAv()">▸ Fornecedores e nomes alternativos</button>
+    <div id="prod-mapa-av" style="display:none;margin-top:14px">
+      <div class="muted small" style="font-weight:600;margin-bottom:6px">Fornecedores vinculados</div>
+      <div id="prod-pf-vis" style="margin-bottom:12px"><div class="muted small">Carregando…</div></div>
+      <div class="muted small" style="font-weight:600;margin-bottom:6px">Nomes alternativos (aliases)</div>
+      <div id="prod-aliases-vis"><div class="muted small">Carregando…</div></div>
+    </div>
+    <!-- oculto para compatibilidade -->
+    <div id="prod-pf" style="display:none"></div>
+    <div id="prod-aliases" style="display:none"></div>
+  </div>
+
+  <!-- Dados técnicos da NF-e -->
+  <div class="card" style="margin-top:0">
+    <button id="btn-dados-av" class="btn-2 btn-sm" style="width:100%;padding:11px;text-align:left;font-weight:500" onclick="toggleDadosAv()">▸ Dados técnicos da nota fiscal</button>
+    <div id="prod-av" style="display:none;margin-top:14px">
+      <p class="muted small" style="margin-bottom:12px">Informações originais da nota fiscal. Apenas consulta.</p>
+      <label class="muted small">Descrição original da NF-e</label>
+      <input id="prod-desc-nf" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
+      <label class="muted small">Código de barras da NF-e</label>
+      <input id="prod-ean-nf" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
+      <label class="muted small">Código do produto na NF-e</label>
+      <input id="prod-cod-nf" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
+      <label class="muted small">CNPJ do fornecedor</label>
+      <input id="prod-cnpj" readonly tabindex="-1" style="color:var(--muted);background:var(--surface2)">
+    </div>
+  </div>
+
+  <!-- Histórico de movimentações -->
+  <div class="card" style="margin-top:0">
+    <div class="sec-title" style="margin-top:0;margin-bottom:8px">Últimas movimentações</div>
+    <div id="prod-historico"><div class="muted small">Carregando…</div></div>
+  </div>
+
+  <!-- Ações perigosas -->
+  <div class="card" style="margin-top:0">
+    <p class="muted small" style="margin-bottom:10px">Use esta opção para remover produtos cadastrados por teste ou erro. Se o produto já tiver histórico, ele será apenas inativado.</p>
+    <button class="btn-2" style="width:100%;padding:13px;color:var(--danger,#d32f2f);border-color:var(--danger,#d32f2f)" onclick="excluirProduto()">🗑 Excluir produto</button>
   </div>
 </section>
 
@@ -362,9 +385,11 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
 <!-- ESTEIRA DE TREINAMENTO -->
 <section class="view" id="v-treino">
   <div style="font-size:13px;padding:10px 12px;border-radius:10px;margin-bottom:12px;background:rgba(128,255,180,.07);border:1px solid rgba(128,255,180,.18);color:var(--muted)">
-    🎓 <b style="color:var(--fg)">Esteira de Treinamento</b> — Você pode bipar várias NF-es em sequência. Nada será lançado no estoque aqui.
+    🎓 <b style="color:var(--ink)">Esteira de Treinamento</b> — Nada é lançado no estoque aqui. Use para ensinar o sistema a reconhecer produtos.
   </div>
 
+  <!-- PASSO 1: Adicionar NF-es -->
+  <div class="sec-title" style="margin-top:4px">Passo 1 — Adicionar NF-es à esteira</div>
   <div class="card">
     <label>Chave de acesso da NF-e</label>
     <input class="chave-input" id="treino-chave" inputmode="numeric" maxlength="54" placeholder="0000 0000 0000 … (44 números)">
@@ -375,21 +400,24 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <div id="treino-add-status" style="margin-top:10px"></div>
   </div>
 
-  <div class="card" id="treino-stats-card" style="margin-top:12px">
-    <div id="treino-stats-content"><div class="muted small">Nenhuma NF-e na esteira ainda. Bipe uma nota acima para começar.</div></div>
+  <!-- Resumo da esteira -->
+  <div class="card" id="treino-stats-card">
+    <div id="treino-stats-content"><div class="muted small">Nenhuma NF-e na esteira ainda. Adicione uma nota acima para começar.</div></div>
   </div>
+  <div id="treino-fila-lista"></div>
 
-  <div style="margin-top:14px">
+  <!-- PASSO 2: Gerar pacote para ChatGPT -->
+  <div class="sec-title">Passo 2 — Enviar ao ChatGPT</div>
+  <div class="card">
+    <p class="muted small" style="margin-bottom:12px">Copie o pacote e cole no ChatGPT. Ele já inclui o comando, o contexto atual do sistema e os produtos desconhecidos.</p>
     <button class="btn" id="btn-copiar-pacote" style="width:100%;padding:14px;font-size:15px" onclick="copiarPacoteCompleto()">📋 Copiar pacote completo para ChatGPT</button>
-    <p class="muted small" style="text-align:center;margin-top:6px;margin-bottom:0">Use este botão para copiar comando + contexto + produtos desconhecidos de uma vez.</p>
-    <button class="btn-2" style="width:100%;padding:12px;margin-top:8px" onclick="baixarPacoteCompleto()">⬇ Baixar pacote completo (.txt)</button>
+    <button class="btn-2" style="width:100%;padding:12px;margin-top:8px" onclick="baixarPacoteCompleto()">⬇ Baixar pacote como arquivo .txt</button>
   </div>
 
-  <div id="treino-fila-lista" style="margin-top:12px"></div>
-
-  <div class="card" style="margin-top:12px">
-    <div class="sec-title" style="margin-top:0">Importar resposta do ChatGPT</div>
-    <p class="muted small" style="margin-bottom:10px">Cole o JSON revisado pelo ChatGPT, valide e importe. Esta importação <b>não altera estoque</b>.</p>
+  <!-- PASSO 3: Importar resposta -->
+  <div class="sec-title">Passo 3 — Importar resposta do ChatGPT</div>
+  <div class="card">
+    <p class="muted small" style="margin-bottom:10px">Cole o JSON que o ChatGPT gerou, valide e importe. <b>Não altera estoque.</b></p>
     <label>JSON revisado pelo ChatGPT</label>
     <textarea id="treino-est-json" rows="5" placeholder='{"schema_version":"1.0","tipo":"catalogo_revisado_gpt",...}'></textarea>
     <div class="row" style="margin-top:10px">
@@ -399,15 +427,21 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <div id="treino-est-result" style="margin-top:10px"></div>
   </div>
 
-  <div class="card" style="margin-top:12px">
-    <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="exportarContexto('treino-adv-box')">⬇ Exportar contexto atual</button>
-    <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="exportarDesconhecidos('treino-adv-box')">⬇ Exportar produtos desconhecidos (banco)</button>
-    <div id="treino-adv-box" class="muted small" style="margin-bottom:4px"></div>
-    <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px;background:rgba(220,50,50,.1);color:var(--danger);border-color:rgba(220,50,50,.3)" onclick="limparEsteira()">🗑 Limpar esteira</button>
+  <!-- Controles avançados -->
+  <div class="sec-title">Controles</div>
+  <div class="card">
+    <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="limparEsteira()">🗑 Limpar esteira de treinamento</button>
+    <p class="muted small" style="margin-bottom:12px;text-align:center">Limpar remove as NF-es da fila. Não apaga produtos nem estoque.</p>
     <button class="btn-2" style="width:100%;padding:13px;background:rgba(220,50,50,.22);color:var(--danger);border-color:rgba(220,50,50,.6);font-weight:700;font-size:15px" onclick="resetarTreinamento()">☢️ Apagar TUDO e começar do zero</button>
+    <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+      <p class="muted small" style="margin-bottom:8px;color:var(--muted)">Exportações avançadas (contexto e desconhecidos separados):</p>
+      <button class="btn-2" style="width:100%;padding:10px;margin-bottom:6px;font-size:13px" onclick="exportarContexto('treino-adv-box')">⬇ Exportar contexto atual</button>
+      <button class="btn-2" style="width:100%;padding:10px;font-size:13px" onclick="exportarDesconhecidos('treino-adv-box')">⬇ Exportar produtos desconhecidos</button>
+      <div id="treino-adv-box" class="muted small" style="margin-top:6px"></div>
+    </div>
   </div>
 
-  <div class="card" style="margin-top:12px;background:rgba(255,180,0,.05);border-color:rgba(255,180,0,.2)">
+  <div class="card" style="background:rgba(255,180,0,.05);border-color:rgba(255,180,0,.2)">
     <p class="muted small" style="margin-bottom:8px">⚠ Precisa confirmar uma compra real no estoque?</p>
     <button class="btn-2" style="width:100%;padding:12px" onclick="nav('import')">📦 Ir para Entrada de NF-e →</button>
   </div>
@@ -543,7 +577,13 @@ async function loadDash(){
     document.getElementById('dash-movs').innerHTML = d.ultimas_movimentacoes.length
       ? d.ultimas_movimentacoes.map(m=>{
           const ent=m.tipo==='ENTRADA'; const cor=ent?'var(--accent)':(m.tipo==='SAIDA'?'var(--danger)':'var(--muted)');
-          return `<div class="list-row"><div><div class="t">${m.tipo} · ${m.motivo||''}</div><div class="s">${fmtDataHora(m.data)}</div></div><div class="v" style="color:${cor}">${ent?'+':(m.tipo==='SAIDA'?'−':'')}${m.quantidade}</div></div>`;
+          const tipoLabel=ent?'Entrada':(m.tipo==='SAIDA'?'Saída':(m.tipo==='AJUSTE'?'Ajuste de inventário':'Movimentação'));
+          const origemLabel=m.origem==='NFE'?' · NF-e':(m.origem==='MANUAL'?' · manual':'');
+          const nomeProd=esc(m.nome_produto||'');
+          return `<div class="list-row" style="cursor:pointer" onclick="abrirDetalheMovimentacao('${esc(m.id_movimentacao||'')}')">
+            <div style="flex:1;min-width:0"><div class="t" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${tipoLabel}${origemLabel}${nomeProd?' · '+nomeProd:''}</div>
+            <div class="s">${fmtDataHora(m.data)}</div></div>
+            <div class="v" style="color:${cor};flex-shrink:0;margin-left:10px">${ent?'+':(m.tipo==='SAIDA'?'−':'')}${arred(m.quantidade)}</div></div>`;
         }).join('')
       : '<div class="muted small">Sem movimentações ainda.</div>';
   }catch(e){ document.getElementById('dash-stats').innerHTML = `<div class="empty">${e.message}</div>`; }
@@ -883,31 +923,61 @@ function setEstoqueFiltro(f){
   filtrarEstoque();
 }
 
+function _renderProdRow(p){
+  const s=statusCadastro(p);
+  const inativo=String(p.ativo||'SIM').toUpperCase()!=='SIM';
+  const teste=String(p.produto_teste||'NAO').toUpperCase()==='SIM';
+  const baixo=!inativo&&p.estoque_minimo!==''&&parseFloat(p.estoque_minimo)>0&&parseFloat(p.estoque_atual)<=parseFloat(p.estoque_minimo);
+  const prefixBadge=(inativo?'<span style="font-size:11px;background:rgba(139,154,150,.15);border:1px solid var(--line);border-radius:4px;padding:1px 5px;margin-right:4px;color:var(--muted)">Inativo</span>':'')
+    +(teste?'<span style="font-size:11px;background:rgba(230,180,80,.15);border:1px solid rgba(230,180,80,.4);border-radius:4px;padding:1px 5px;margin-right:4px;color:var(--warn)">Teste</span>':'');
+  const sub=inativo?'Produto inativo':(s.faltando.length?`Falta: ${s.faltando.slice(0,2).join(', ')}`:`Custo méd. ${brl(p.custo_medio)} · mín ${p.estoque_minimo||'—'}`);
+  return `<div class="list-row" style="cursor:pointer;${inativo?'opacity:.6':''}" onclick="abrirProduto('${p.id_produto}')">
+    <div style="flex:1;min-width:0"><div class="t">${prefixBadge}${badgeEstoque(p)} ${esc(p.nome_interno||p.descricao_original_nf||'—')}</div>
+    <div class="s">${sub}</div></div>
+    <div class="v" style="${baixo?'color:var(--danger)':''}">
+      ${inativo?'':arred(p.estoque_atual)} <span class="muted small">${inativo?'':p.unidade_estoque||''}</span></div></div>`;
+}
+
 function renderEstoque(list){
   const el=document.getElementById('estoque-list');
   if(!list.length){
     let msg='Nenhum produto encontrado.';
-    if(estoqueFiltro.startsWith('cat:')){
-      const catId=estoqueFiltro.slice(4);
-      const catNome=catCache?(catCache.find(c=>c.id_categoria===catId)?.nome_categoria||'esta categoria'):'esta categoria';
-      msg=`Nenhum produto em "${catNome}".<br><small>Toque em um produto e atribua a categoria para ele aparecer aqui.</small>`;
+    if(estoqueFiltro==='nao-conf') msg='Nenhum produto pendente. Tudo já foi aprendido ✓';
+    else if(estoqueFiltro==='abaixo-min') msg='Nenhum produto abaixo do mínimo.';
+    else if(estoqueFiltro.startsWith('cat:')){
+      const catNome=catCache?(catCache.find(c=>c.id_categoria===estoqueFiltro.slice(4))?.nome_categoria||'esta categoria'):'esta categoria';
+      msg=`Nenhum produto em "${catNome}".`;
     }
     el.innerHTML=`<div class="empty">${msg}</div>`; return;
   }
-  el.innerHTML=list.map(p=>{
-    const s=statusCadastro(p);
-    const inativo=String(p.ativo||'SIM').toUpperCase()!=='SIM';
-    const teste=String(p.produto_teste||'NAO').toUpperCase()==='SIM';
-    const baixo=!inativo&&p.estoque_minimo!==''&&parseFloat(p.estoque_minimo)>0&&parseFloat(p.estoque_atual)<=parseFloat(p.estoque_minimo);
-    const prefixBadge=(inativo?'<span style="font-size:11px;background:#f5f5f5;border:1px solid #ccc;border-radius:4px;padding:1px 5px;margin-right:4px;color:#888">Inativo</span>':'')
-      +(teste?'<span style="font-size:11px;background:#fff8e1;border:1px solid #f9a825;border-radius:4px;padding:1px 5px;margin-right:4px;color:#8a6d00">Teste</span>':'');
-    const sub=inativo?'Produto inativo':(s.faltando.length ? `Falta: ${s.faltando.slice(0,2).join(', ')}` : `Custo méd. ${brl(p.custo_medio)} · mín ${p.estoque_minimo||'—'}`);
-    return `<div class="list-row" style="cursor:pointer;${inativo?'opacity:.6':''}" onclick="abrirProduto('${p.id_produto}')">
-      <div style="flex:1;min-width:0"><div class="t">${prefixBadge}${badgeEstoque(p)} ${esc(p.nome_interno||p.descricao_original_nf||'—')}</div>
-      <div class="s">${sub}</div></div>
-      <div class="v" style="${baixo?'color:var(--danger)':''}">
-        ${inativo?'':arred(p.estoque_atual)} <span class="muted small">${inativo?'':p.unidade_estoque||''}</span></div></div>`;
-  }).join('');
+  const q=document.getElementById('busca-estoque').value.toLowerCase();
+  const filtrandoCategoria=estoqueFiltro.startsWith('cat:');
+  // Agrupar por categoria quando não há filtro por condição específica
+  const agrupar = !filtrandoCategoria && estoqueFiltro!=='inativos' && estoqueFiltro!=='produto-teste';
+  if(!agrupar){
+    el.innerHTML=list.map(p=>_renderProdRow(p)).join('') || '<div class="empty">Nenhum produto encontrado.</div>';
+    return;
+  }
+  // Agrupa por categoria, alfabético dentro de cada grupo
+  const grupos={};
+  list.forEach(p=>{
+    const k=p.categoria_id||'__';
+    (grupos[k]=grupos[k]||[]).push(p);
+  });
+  const catsSorted=Object.keys(grupos).sort((a,b)=>{
+    if(a==='__') return 1; if(b==='__') return -1;
+    const na=catCache?.find(c=>c.id_categoria===a)?.nome_categoria||a;
+    const nb=catCache?.find(c=>c.id_categoria===b)?.nome_categoria||b;
+    return na.localeCompare(nb,'pt-BR');
+  });
+  let html='';
+  catsSorted.forEach(k=>{
+    const nome=k==='__'?'Sem categoria':(catCache?.find(c=>c.id_categoria===k)?.nome_categoria||k);
+    const prods=grupos[k].sort((a,b)=>(a.nome_interno||'').localeCompare(b.nome_interno||'','pt-BR'));
+    html+=`<div class="sec-title" style="margin-top:14px;margin-bottom:2px">${esc(nome)}</div>`;
+    html+=prods.map(p=>_renderProdRow(p)).join('');
+  });
+  el.innerHTML=html;
 }
 
 function filtrarEstoque(){
@@ -967,8 +1037,8 @@ async function abrirProduto(id){
   document.getElementById('prod-ean-nf').value=prod.codigo_barras||'';
   document.getElementById('prod-cod-nf').value=prod.codigo_produto_nf||'';
   document.getElementById('prod-cnpj').value=prod.cnpj_fornecedor||'';
-  document.getElementById('prod-ultimo-custo').value=prod.ultimo_custo_unitario?brl(prod.ultimo_custo_unitario):'';
-  document.getElementById('prod-custo-medio').value=prod.custo_medio?brl(prod.custo_medio):'';
+  const _ucEl=document.getElementById('prod-ultimo-custo'); if(_ucEl) _ucEl.value=prod.ultimo_custo_unitario?brl(prod.ultimo_custo_unitario):'';
+  const _cmEl=document.getElementById('prod-custo-medio'); if(_cmEl) _cmEl.value=prod.custo_medio?brl(prod.custo_medio):'';
 
   // Colapsar dados avançados
   document.getElementById('prod-av').style.display='none';
@@ -976,27 +1046,75 @@ async function abrirProduto(id){
 
   nav('produto');
 
-  // Carrega embalagens, mapeamentos e aliases de forma assíncrona (não bloqueia a navegação)
+  // Preenche informações de custos/estoque visíveis
+  const elEstoqueVis=document.getElementById('prod-estoque-vis');
+  const elCustoVis=document.getElementById('prod-custo-vis');
+  const elUltCustoVis=document.getElementById('prod-ultimo-custo-vis');
+  const elConfVis=document.getElementById('prod-confirmado-vis');
+  if(elEstoqueVis) elEstoqueVis.textContent=`${arred(prod.estoque_atual||0)} ${prod.unidade_estoque||'UN'}`;
+  if(elCustoVis) elCustoVis.textContent=prod.custo_medio?brl(prod.custo_medio):'—';
+  if(elUltCustoVis) elUltCustoVis.textContent=prod.ultimo_custo_unitario?brl(prod.ultimo_custo_unitario):'—';
+  if(elConfVis){
+    const conf=String(prod.confirmado||'NAO').toUpperCase()==='SIM';
+    elConfVis.innerHTML=conf
+      ?'<span class="badge b-ok">✓ Já aprendido</span>'
+      :'<span class="badge b-wait">Produto pendente — ainda não revisado pelo ChatGPT</span>';
+  }
+
+  // Carrega embalagens, mapeamentos, aliases e histórico de forma assíncrona
   try{
-    const [embData, pfData, alData] = await Promise.all([
+    const [embData, pfData, alData, histData] = await Promise.all([
       api('/api/admin?recurso=embalagens&id_produto='+encodeURIComponent(id)),
       api('/api/listar?aba=Produto_Fornecedor'),
       api('/api/listar?aba=Aliases_Produto'),
+      api('/api/admin?recurso=produto-historico&id_produto='+encodeURIComponent(id)),
     ]);
     produtoEditCtx.embs=embData.rows||[];
     produtoEditCtx.pf=(pfData.rows||[]).filter(r=>r.id_produto===id&&String(r.ativo||'SIM').toUpperCase()==='SIM');
     produtoEditCtx.aliases=(alData.rows||[]).filter(r=>r.id_produto===id&&String(r.ativo||'SIM').toUpperCase()==='SIM');
 
-    document.getElementById('prod-embs').innerHTML=produtoEditCtx.embs.length
-      ? produtoEditCtx.embs.map(e=>`<div>${esc(e.descricao||e.sigla)} — fator ${e.fator} ${e.unidade_base||''}</div>`).join('')
-      : '<em>Nenhuma embalagem cadastrada</em>';
-    document.getElementById('prod-pf').innerHTML=produtoEditCtx.pf.length
-      ? produtoEditCtx.pf.map(m=>`<div>${esc(m.nome_fornecedor||m.cnpj_fornecedor||'?')} · cód. ${m.codigo_produto_nf}</div>`).join('')
-      : '<em>Sem mapeamentos de fornecedor</em>';
-    document.getElementById('prod-aliases').innerHTML=produtoEditCtx.aliases.length
-      ? produtoEditCtx.aliases.map(a=>`<div>${esc(a.alias)}</div>`).join('')
-      : '<em>Sem aliases cadastrados</em>';
-  }catch{ /* dados avançados opcionais */ }
+    // Embalagens (nova seção visível)
+    const elEmbs=document.getElementById('prod-embs-vis');
+    if(elEmbs) elEmbs.innerHTML=produtoEditCtx.embs.length
+      ? '<div class="card" style="padding:10px;margin-top:0;background:var(--surface2)">'+produtoEditCtx.embs.map(e=>`<div class="list-row" style="padding:8px 0">
+          <div><div class="t" style="font-size:13px">${esc(e.descricao||e.sigla||'Embalagem')}</div>
+          <div class="s">${e.fator} ${e.unidade_base||prod.unidade_estoque||'UN'} por embalagem</div></div>
+          <div class="muted small">${e.sigla||''}</div></div>`).join('')+'</div>'
+      : '<div class="muted small">Este produto ainda não tem embalagens cadastradas.<br>Elas são criadas automaticamente na importação de NF-e.</div>';
+
+    // Fornecedores e aliases (nova seção)
+    const elPf=document.getElementById('prod-pf-vis');
+    if(elPf) elPf.innerHTML=produtoEditCtx.pf.length
+      ? produtoEditCtx.pf.map(m=>`<div class="list-row" style="padding:8px 0">
+          <div><div class="t" style="font-size:13px">${esc(m.nome_fornecedor||m.cnpj_fornecedor||'—')}</div>
+          <div class="s">Cód. ${esc(m.codigo_produto_nf||'—')} · CNPJ ${esc(m.cnpj_fornecedor||'—')}</div></div>
+          ${m.confirmado_pelo_usuario==='SIM'?'<span class="badge b-ok" style="font-size:10px">confirmado</span>':'<span class="badge b-wait" style="font-size:10px">aprendido</span>'}</div>`).join('')
+      : '<div class="muted small">Nenhum fornecedor vinculado ainda.</div>';
+    const elAl=document.getElementById('prod-aliases-vis');
+    if(elAl) elAl.innerHTML=produtoEditCtx.aliases.length
+      ? produtoEditCtx.aliases.map(a=>`<div class="list-row" style="padding:6px 0"><div class="t" style="font-size:13px">${esc(a.alias)}</div></div>`).join('')
+      : '<div class="muted small">Nenhum nome alternativo cadastrado.</div>';
+
+    // Histórico de movimentações
+    const elHist=document.getElementById('prod-historico');
+    if(elHist){
+      const rows=histData.rows||[];
+      if(!rows.length){
+        elHist.innerHTML='<div class="muted small">Este produto ainda não tem movimentações.</div>';
+      } else {
+        elHist.innerHTML=rows.map(m=>{
+          const ent=m.tipo==='ENTRADA'; const cor=ent?'var(--accent)':(m.tipo==='SAIDA'?'var(--danger)':'var(--muted)');
+          const tipoLabel=ent?'Entrada':(m.tipo==='SAIDA'?'Saída':(m.tipo==='AJUSTE'?'Ajuste':'Movimentação'));
+          const origemLabel=m.origem==='NFE'?' · NF-e':(m.origem==='MANUAL'?' · manual':'');
+          const fornLabel=m.nome_fornecedor?` · ${esc(m.nome_fornecedor)}`:'';
+          return `<div class="list-row" style="cursor:pointer;padding:10px 0" onclick="abrirDetalheMovimentacao('${esc(m.id_movimentacao)}')">
+            <div style="flex:1;min-width:0"><div class="t" style="font-size:13px">${tipoLabel}${origemLabel}${fornLabel}</div>
+            <div class="s">${fmtDataHora(m.data)}</div></div>
+            <div class="v" style="color:${cor};flex-shrink:0;margin-left:10px">${ent?'+':(m.tipo==='SAIDA'?'−':'')}${arred(m.quantidade)}</div></div>`;
+        }).join('');
+      }
+    }
+  }catch(e){ /* dados opcionais — não quebra a tela */ }
 }
 
 function toggleDadosAv(){
@@ -1004,7 +1122,99 @@ function toggleDadosAv(){
   const btn=document.getElementById('btn-dados-av');
   const abrir=el.style.display==='none';
   el.style.display=abrir?'block':'none';
-  btn.textContent=abrir?'▾ Dados avançados':'▸ Dados avançados';
+  btn.textContent=abrir?'▾ Dados técnicos da nota fiscal':'▸ Dados técnicos da nota fiscal';
+}
+
+function toggleMapaAv(){
+  const el=document.getElementById('prod-mapa-av');
+  const btn=document.getElementById('btn-mapa-av');
+  if(!el||!btn) return;
+  const abrir=el.style.display==='none';
+  el.style.display=abrir?'block':'none';
+  btn.textContent=abrir?'▾ Fornecedores e nomes alternativos':'▸ Fornecedores e nomes alternativos';
+}
+
+function abrirDetalheMovimentacao(idMov){
+  if(!idMov) return;
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.65);display:flex;align-items:flex-end;justify-content:center';
+  ov.innerHTML=`<div style="background:var(--surface);width:100%;max-width:560px;border-radius:20px 20px 0 0;padding:20px 20px 36px;max-height:85vh;overflow-y:auto">
+    <div style="width:40px;height:4px;background:var(--line);border-radius:4px;margin:0 auto 16px"></div>
+    <div id="_mov_content"><div class="status-row"><div class="spinner"></div> Carregando…</div></div>
+    <button class="btn-2" style="width:100%;padding:13px;margin-top:16px" onclick="this.closest('[style]').remove()">Fechar</button>
+  </div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click',e=>{ if(e.target===ov) ov.remove(); });
+  api('/api/admin?recurso=movimentacao-detalhe&id_movimentacao='+encodeURIComponent(idMov))
+    .then(r=>{
+      const m=r.movimentacao||{};
+      const prod=r.produto||{};
+      const nota=r.nota||null;
+      const forn=r.fornecedor||null;
+      const ent=m.tipo==='ENTRADA'; const cor=ent?'var(--accent)':(m.tipo==='SAIDA'?'var(--danger)':'var(--muted)');
+      const tipoLabel=ent?'Entrada':(m.tipo==='SAIDA'?'Saída':(m.tipo==='AJUSTE'?'Ajuste de inventário':'Movimentação'));
+      const sinal=ent?'+':(m.tipo==='SAIDA'?'−':'');
+      let html=`<h3 style="font-size:16px;margin-bottom:16px">${tipoLabel}</h3>`;
+      html+=`<div class="card" style="padding:14px;margin-bottom:10px">`;
+      if(prod.nome_interno) html+=`<div class="list-row" style="padding:8px 0"><div class="s">Produto</div><div class="t" style="text-align:right">${esc(prod.nome_interno)}</div></div>`;
+      html+=`<div class="list-row" style="padding:8px 0"><div class="s">Data</div><div class="t">${fmtDataHora(m.data)}</div></div>`;
+      html+=`<div class="list-row" style="padding:8px 0"><div class="s">Quantidade</div><div class="v" style="color:${cor}">${sinal}${arred(m.quantidade)} ${prod.unidade_estoque||''}</div></div>`;
+      if(m.custo_unitario&&parseFloat(m.custo_unitario)>0) html+=`<div class="list-row" style="padding:8px 0"><div class="s">Custo unitário</div><div class="v">${brl(m.custo_unitario)}</div></div>`;
+      if(m.valor_total&&parseFloat(m.valor_total)>0) html+=`<div class="list-row" style="padding:8px 0"><div class="s">Valor total</div><div class="v">${brl(m.valor_total)}</div></div>`;
+      if(m.origem) html+=`<div class="list-row" style="padding:8px 0"><div class="s">Origem</div><div class="t">${m.origem==='NFE'?'Nota fiscal':(m.origem==='MANUAL'?'Entrada manual':'Inventário')}</div></div>`;
+      if(forn) html+=`<div class="list-row" style="padding:8px 0"><div class="s">Fornecedor</div><div class="t" style="text-align:right;max-width:60%">${esc(forn.razao_social||forn.cnpj)}</div></div>`;
+      if(nota) html+=`<div class="list-row" style="padding:8px 0"><div class="s">Nota fiscal</div><div class="t">NF ${esc(nota.numero_nota||'—')} · ${fmtData(nota.data_emissao)}</div></div>`;
+      if(m.motivo) html+=`<div class="list-row" style="padding:8px 0"><div class="s">Motivo</div><div class="t">${esc(m.motivo)}</div></div>`;
+      if(m.observacao) html+=`<div class="list-row" style="border:none;padding:8px 0"><div class="s">Observação</div><div class="t" style="text-align:right;max-width:65%">${esc(m.observacao)}</div></div>`;
+      html+=`</div>`;
+      if(prod.id_produto) html+=`<button class="btn-2" style="width:100%;padding:11px;font-size:13px;margin-bottom:4px" onclick="this.closest('[style*=fixed]').remove();abrirProduto('${prod.id_produto}')">Ver produto →</button>`;
+      document.getElementById('_mov_content').innerHTML=html;
+    })
+    .catch(e=>{ document.getElementById('_mov_content').innerHTML=`<div class="alertbar">${e.message}</div>`; });
+}
+
+// Busca produto por nome no inventário
+function buscarPorNomeInventario(){
+  const q=document.getElementById('inv-nome').value.toLowerCase().trim();
+  const lista=document.getElementById('inv-nome-list');
+  if(!q||q.length<2){ lista.style.display='none'; return; }
+  if(!estoqueCache.length){ lista.style.display='none'; return; }
+  const matches=estoqueCache.filter(p=>
+    String(p.ativo||'SIM').toUpperCase()==='SIM' &&
+    String(p.produto_teste||'NAO').toUpperCase()!=='SIM' &&
+    (p.nome_interno||p.descricao_original_nf||'').toLowerCase().includes(q)
+  ).slice(0,8);
+  if(!matches.length){ lista.style.display='none'; return; }
+  lista.style.display='block';
+  lista.innerHTML=matches.map(p=>`<div style="padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--line);font-size:14px"
+    onclick="selecionarProdutoInventario('${p.id_produto}')"
+    onmousedown="event.preventDefault()">
+    <div style="font-weight:500">${esc(p.nome_interno||p.descricao_original_nf||'—')}</div>
+    <div class="muted small">${arred(p.estoque_atual)} ${p.unidade_estoque||''} em estoque</div>
+  </div>`).join('');
+}
+
+async function selecionarProdutoInventario(id){
+  const lista=document.getElementById('inv-nome-list');
+  lista.style.display='none';
+  document.getElementById('inv-nome').value='';
+  // Usa o mesmo fluxo do buscarPorEan, mas por id_produto
+  const prod=estoqueCache.find(p=>p.id_produto===id);
+  if(!prod){ toast('Produto não encontrado.','err'); return; }
+  const base=prod.unidade_estoque||'UN';
+  const embs=await getEmbalagens(id);
+  invContagem=[{desc:`${base} (avulsa)`,fator:1,qtd:0}]
+    .concat(embs.map(e=>({desc:e.descricao,fator:parseFloat(e.fator)||1,qtd:0})));
+  const box=document.getElementById('inv-result');
+  box.innerHTML=`<div class="card" style="margin-top:14px">
+    <div class="t" style="font-weight:600">${esc(prod.nome_interno||prod.descricao_original_nf)}</div>
+    <div class="muted small">Estoque no sistema: <b>${arred(prod.estoque_atual)} ${base}</b></div>
+    <div id="inv-linhas" style="margin-top:10px"></div>
+    <div class="prev" id="inv-total" style="margin-top:12px"></div>
+    <button class="btn" onclick="ajustarInventario('${id}')">Confirmar contagem</button>
+  </div>`;
+  renderInvLinhas(base);
+  box.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
 async function scanEanProduto(){
@@ -1393,6 +1603,11 @@ async function _startScanner(containerId, onResult){
 }
 
 /* INVENTÁRIO */
+// Hide nome list on blur
+document.addEventListener('click', e=>{
+  const lista=document.getElementById('inv-nome-list');
+  if(lista && !lista.contains(e.target) && e.target.id!=='inv-nome') lista.style.display='none';
+});
 function toggleScanner(){
   const el=document.getElementById('scanner');
   const btn=document.getElementById('btn-scanner-inv');

@@ -202,7 +202,7 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
 <div class="toast" id="toast"></div>
 
 <script>
-const API = '';
+const API = window.Capacitor?.isNativePlatform?.() ? 'https://superajudante.vercel.app' : '';
 let confData = null, estoqueCache = [], _activeScan = null;
 
 function toast(msg, type=''){

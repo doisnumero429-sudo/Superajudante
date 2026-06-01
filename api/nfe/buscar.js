@@ -6,9 +6,10 @@
 
 import { addNfe } from '../_lib/meudanfe.js';
 import { readRows, readConfig } from '../_lib/db.js';
-import { json, validarChave, readBody, podeConsultar, registrarConsulta, resetarTentativas } from '../_lib/util.js';
+import { json, preflight, validarChave, readBody, podeConsultar, registrarConsulta, resetarTentativas } from '../_lib/util.js';
 
 export default async function handler(req, res) {
+  if (preflight(req, res)) return;
   if (req.method !== 'POST') return json(res, 405, { erro: 'Metodo nao permitido' });
 
   try {

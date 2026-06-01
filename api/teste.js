@@ -5,9 +5,10 @@
 //  - conexao com a Meu Danfe (valida Api-Key sem gastar credito)
 
 import { readRows, readConfig, TABLES } from './_lib/db.js';
-import { json } from './_lib/util.js';
+import { json, preflight } from './_lib/util.js';
 
 export default async function handler(req, res) {
+  if (preflight(req, res)) return;
   const resultado = { app: 'Super Ajudante', timestamp: new Date().toISOString(), checagens: {} };
 
   // 1) Variaveis de ambiente

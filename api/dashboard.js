@@ -1,8 +1,9 @@
 // api/dashboard.js
 import { readRows } from './_lib/db.js';
-import { json } from './_lib/util.js';
+import { json, preflight } from './_lib/util.js';
 
 export default async function handler(req, res) {
+  if (preflight(req, res)) return;
   try {
     const [produtos, notas, contas, movs] = await Promise.all([
       readRows('Produtos'), readRows('Notas_Fiscais'),

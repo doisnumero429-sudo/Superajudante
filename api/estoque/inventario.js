@@ -2,9 +2,10 @@
 // GET  ?codigo_barras=...  -> encontra produto e mostra estoque atual.
 // POST { id_produto, quantidade_contada, usuario } -> ajusta estoque pela diferenca.
 import { readRows, appendRow, updateRow, nextId } from '../_lib/db.js';
-import { json, readBody, nowStr } from '../_lib/util.js';
+import { json, preflight, readBody, nowStr } from '../_lib/util.js';
 
 export default async function handler(req, res) {
+  if (preflight(req, res)) return;
   try {
     if (req.method === 'GET') {
       const params = req.query || new URL(req.url, 'http://x').searchParams;

@@ -1,9 +1,10 @@
 // api/estoque/saida.js
 // POST { id_produto, quantidade, motivo, observacao, usuario }
 import { readRows, appendRow, updateRow, nextId } from '../_lib/db.js';
-import { json, readBody, nowStr } from '../_lib/util.js';
+import { json, preflight, readBody, nowStr } from '../_lib/util.js';
 
 export default async function handler(req, res) {
+  if (preflight(req, res)) return;
   if (req.method !== 'POST') return json(res, 405, { erro: 'Metodo nao permitido' });
   try {
     const b = await readBody(req);

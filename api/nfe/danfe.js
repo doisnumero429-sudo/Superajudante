@@ -1,9 +1,10 @@
 // api/nfe/danfe.js
 // GET ?chave=... -> retorna o DANFE em PDF (base64).
 import { getDanfe } from '../_lib/meudanfe.js';
-import { json, validarChave } from '../_lib/util.js';
+import { json, preflight, validarChave } from '../_lib/util.js';
 
 export default async function handler(req, res) {
+  if (preflight(req, res)) return;
   try {
     const params = req.query || new URL(req.url, 'http://x').searchParams;
     const chave = validarChave(params.chave || params.get?.('chave'));

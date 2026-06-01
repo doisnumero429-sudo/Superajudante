@@ -49,6 +49,8 @@ export default async function handler(req, res) {
     const cnpjForn = dados.fornecedor.cnpj;
     const itens = dados.itens.map((it) => {
       const match = produtos.find((p) => {
+        if (String(p.ativo || 'SIM').toUpperCase() !== 'SIM') return false;
+        if (String(p.produto_teste || 'NAO').toUpperCase() === 'SIM') return false;
         const mesmoForn = String(p.cnpj_fornecedor).replace(/\D/g, '') === cnpjForn;
         const porCodigo = mesmoForn && String(p.codigo_produto_nf) === String(it.codigo_produto_nf);
         const porEan = it.codigo_barras && String(p.codigo_barras) === String(it.codigo_barras);

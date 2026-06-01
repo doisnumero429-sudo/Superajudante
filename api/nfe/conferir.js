@@ -43,6 +43,8 @@ export default async function handler(req, res) {
     const acharProduto = (it) => {
       const descNorm = normalizarDesc(it.descricao_original);
       let p = produtos.find((x) => {
+        if (String(x.ativo || 'SIM').toUpperCase() !== 'SIM') return false;
+        if (String(x.produto_teste || 'NAO').toUpperCase() === 'SIM') return false;
         const mesmoForn = String(x.cnpj_fornecedor).replace(/\D/g, '') === cnpjForn;
         const porCodigo = mesmoForn && String(x.codigo_produto_nf) === String(it.codigo_produto_nf);
         const porEan = it.codigo_barras && String(x.codigo_barras) === String(it.codigo_barras);
@@ -60,7 +62,10 @@ export default async function handler(req, res) {
       if (pf && prodById[pf.id_produto]) return prodById[pf.id_produto];
       const al = aliasRows.find((a) => String(a.ativo || 'SIM').toUpperCase() === 'SIM'
         && normalizarDesc(a.alias) === descNorm);
-      if (al && prodById[al.id_produto]) return prodById[al.id_produto];
+      if (al && prodById[al.id_produto]) {
+        const pa = prodById[al.id_produto];
+        if (String(pa.ativo || 'SIM').toUpperCase() === 'SIM' && String(pa.produto_teste || 'NAO').toUpperCase() !== 'SIM') return pa;
+      }
       return null;
     };
 

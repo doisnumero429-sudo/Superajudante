@@ -400,6 +400,7 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
       <button class="btn-2" style="width:100%;padding:12px" onclick="copiarComandoGPT()">📋 Copiar comando para o ChatGPT (só)</button>
       <div id="treino-adv-box" class="muted small" style="margin-top:8px;margin-bottom:12px"></div>
       <button class="btn-2" style="width:100%;padding:12px;background:rgba(220,50,50,.1);color:var(--danger);border-color:rgba(220,50,50,.3)" onclick="limparEsteira()">🗑 Limpar esteira de treinamento</button>
+      <button class="btn-2" style="width:100%;padding:12px;margin-top:8px;background:rgba(220,50,50,.2);color:var(--danger);border-color:rgba(220,50,50,.5);font-weight:700" onclick="resetarTreinamento()">🔴 Resetar TUDO e começar do zero</button>
     </div>
   </details>
 
@@ -1887,6 +1888,39 @@ async function limparEsteira(){
   try{
     await api('/api/admin?recurso=treino-fila-limpar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
     toast('Esteira limpa ✓','ok');
+    await loadTreino();
+  }catch(e){ toast(e.message,'err'); }
+}
+
+async function resetarTreinamento(){
+  const ok=await new Promise(resolve=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:24px';
+    ov.innerHTML=`<div style="background:var(--surface);border:2px solid var(--danger);border-radius:16px;padding:20px;width:100%;max-width:380px">
+      <div style="font-size:28px;text-align:center;margin-bottom:10px">⚠️</div>
+      <div style="font-weight:700;font-size:16px;margin-bottom:8px;text-align:center;color:var(--danger)">Resetar TUDO?</div>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:8px">Esta ação apaga:</p>
+      <ul style="font-size:12px;color:var(--fg);margin:0 0 12px 16px;line-height:1.7">
+        <li>Toda a esteira de treinamento (NF-es bipadas)</li>
+        <li>Todos os mapeamentos fornecedor/produto</li>
+        <li>Todos os aliases de produto</li>
+        <li>Todas as embalagens</li>
+        <li>Todos os produtos sem estoque e sem histórico</li>
+      </ul>
+      <p style="font-size:12px;color:var(--danger);text-align:center;margin-bottom:16px"><b>Produtos com estoque ou NF-e lançada são mantidos.</b></p>
+      <div class="row">
+        <button class="btn-2 btn-sm" style="width:100%;padding:12px" id="_rt_cancel">Cancelar</button>
+        <button class="btn-2 btn-sm" style="width:100%;padding:12px;background:var(--danger);color:#fff;border-color:var(--danger)" id="_rt_ok">Resetar tudo</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#_rt_cancel').onclick=()=>{ ov.remove(); resolve(false); };
+    ov.querySelector('#_rt_ok').onclick=()=>{ ov.remove(); resolve(true); };
+  });
+  if(!ok) return;
+  try{
+    toast('Resetando…');
+    const r=await api('/api/admin?recurso=treino-resetar-tudo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    toast(`Reset concluído ✓ — ${r.produtos_deletados} produto(s) removido(s).`,'ok');
     await loadTreino();
   }catch(e){ toast(e.message,'err'); }
 }

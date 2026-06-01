@@ -903,37 +903,26 @@ async function treinoFilaLimpar(req, res) {
 async function treinoResetarTudo(req, res) {
   if (req.method !== 'POST') return json(res, 405, { erro: 'POST only' });
 
-  // 1. Limpa esteira
-  try { await deleteAllRows('Treino_Itens'); } catch { /* ok se vazia */ }
-  try { await deleteAllRows('Treino_Fila'); } catch { /* ok se vazia */ }
+  // Apaga tudo que foi importado/treinado.
+  // MANTÉM: Categorias e Configuracoes (regras do sistema).
+  const tabelas = [
+    'Treino_Itens', 'Treino_Fila', 'Treino_Importacoes',
+    'Aliases_Produto', 'Produto_Fornecedor', 'Embalagens',
+    'Contas_Pagar', 'Movimentacoes_Estoque', 'Itens_Nota',
+    'Notas_Fiscais', 'Fornecedores', 'Produtos',
+  ];
 
-  // 2. Limpa tabelas de aprendizado
-  try { await deleteAllRows('Produto_Fornecedor'); } catch { /* ok */ }
-  try { await deleteAllRows('Aliases_Produto'); } catch { /* ok */ }
-  try { await deleteAllRows('Embalagens'); } catch { /* ok */ }
-
-  // 3. Remove produtos sem estoque e sem histórico
-  let produtosDeletados = 0;
-  try {
-    const produtos = await readRows('Produtos');
-    let movs = [], itens = [];
-    try { movs = await readRows('Movimentacoes_Estoque'); } catch { /* ok */ }
-    try { itens = await readRows('Itens_Nota'); } catch { /* ok */ }
-
-    const comMovs = new Set(movs.map((m) => m.id_produto));
-    const comItens = new Set(itens.map((i) => i.id_produto));
-
-    for (const p of produtos) {
-      const semEstoque = (parseFloat(p.estoque_atual) || 0) === 0;
-      const semHistorico = !comMovs.has(p.id_produto) && !comItens.has(p.id_produto);
-      if (semEstoque && semHistorico) {
-        await deleteRow('Produtos', p.id_produto);
-        produtosDeletados += 1;
-      }
+  const resultado = {};
+  for (const t of tabelas) {
+    try {
+      await deleteAllRows(t);
+      resultado[t] = 'ok';
+    } catch (e) {
+      resultado[t] = `erro: ${e.message}`;
     }
-  } catch { /* ok */ }
+  }
 
-  return json(res, 200, { ok: true, produtos_deletados: produtosDeletados });
+  return json(res, 200, { ok: true, resultado });
 }
 
 // ---------- ESTEIRA: PACOTE COMPLETO PARA CHATGPT ----------

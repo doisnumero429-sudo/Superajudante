@@ -1895,22 +1895,25 @@ async function limparEsteira(){
 async function resetarTreinamento(){
   const ok=await new Promise(resolve=>{
     const ov=document.createElement('div');
-    ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:24px';
-    ov.innerHTML=`<div style="background:var(--surface);border:2px solid var(--danger);border-radius:16px;padding:20px;width:100%;max-width:380px">
-      <div style="font-size:28px;text-align:center;margin-bottom:10px">⚠️</div>
-      <div style="font-weight:700;font-size:16px;margin-bottom:8px;text-align:center;color:var(--danger)">Resetar TUDO?</div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:8px">Esta ação apaga:</p>
-      <ul style="font-size:12px;color:var(--fg);margin:0 0 12px 16px;line-height:1.7">
-        <li>Toda a esteira de treinamento (NF-es bipadas)</li>
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center;padding:24px';
+    ov.innerHTML=`<div style="background:var(--surface);border:2px solid var(--danger);border-radius:16px;padding:20px;width:100%;max-width:400px">
+      <div style="font-size:28px;text-align:center;margin-bottom:8px">☢️</div>
+      <div style="font-weight:700;font-size:16px;margin-bottom:8px;text-align:center;color:var(--danger)">RESET TOTAL — sem volta</div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:8px">Apaga <b style="color:var(--fg)">tudo que foi importado</b>:</p>
+      <ul style="font-size:12px;color:var(--fg);margin:0 0 10px 16px;line-height:1.8">
+        <li>Todos os produtos cadastrados</li>
+        <li>Todos os fornecedores</li>
+        <li>Todas as notas fiscais e itens</li>
+        <li>Todas as movimentações de estoque</li>
+        <li>Todas as contas a pagar</li>
         <li>Todos os mapeamentos fornecedor/produto</li>
-        <li>Todos os aliases de produto</li>
-        <li>Todas as embalagens</li>
-        <li>Todos os produtos sem estoque e sem histórico</li>
+        <li>Todos os aliases e embalagens</li>
+        <li>Toda a esteira de treinamento</li>
       </ul>
-      <p style="font-size:12px;color:var(--danger);text-align:center;margin-bottom:16px"><b>Produtos com estoque ou NF-e lançada são mantidos.</b></p>
+      <p style="font-size:12px;color:var(--accent);text-align:center;margin-bottom:16px">✓ <b>Categorias e configurações são mantidas.</b></p>
       <div class="row">
         <button class="btn-2 btn-sm" style="width:100%;padding:12px" id="_rt_cancel">Cancelar</button>
-        <button class="btn-2 btn-sm" style="width:100%;padding:12px;background:var(--danger);color:#fff;border-color:var(--danger)" id="_rt_ok">Resetar tudo</button>
+        <button class="btn-2 btn-sm" style="width:100%;padding:12px;background:var(--danger);color:#fff;border-color:var(--danger);font-weight:700" id="_rt_ok">Apagar tudo e começar do zero</button>
       </div></div>`;
     document.body.appendChild(ov);
     ov.querySelector('#_rt_cancel').onclick=()=>{ ov.remove(); resolve(false); };
@@ -1918,9 +1921,9 @@ async function resetarTreinamento(){
   });
   if(!ok) return;
   try{
-    toast('Resetando…');
-    const r=await api('/api/admin?recurso=treino-resetar-tudo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
-    toast(`Reset concluído ✓ — ${r.produtos_deletados} produto(s) removido(s).`,'ok');
+    toast('Apagando tudo…');
+    await api('/api/admin?recurso=treino-resetar-tudo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    toast('Reset concluído ✓ — banco limpo, pode começar do zero.','ok');
     await loadTreino();
   }catch(e){ toast(e.message,'err'); }
 }

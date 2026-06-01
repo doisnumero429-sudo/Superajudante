@@ -11,7 +11,14 @@ export default async function handler(req, res) {
       const params = req.query || new URL(req.url, 'http://x').searchParams;
       const ean = params.codigo_barras || params.get?.('codigo_barras');
       const produtos = await readRows('Produtos');
-      const prod = produtos.find((p) => String(p.codigo_barras) === String(ean) && String(p.ativo || 'SIM').toUpperCase() === 'SIM' && String(p.produto_teste || 'NAO').toUpperCase() !== 'SIM');
+      const eanStr = String(ean || '').trim();
+      const prod = eanStr ? produtos.find((p) => {
+        const u = String(p.codigo_barras_unitario || '').trim();
+        const n = String(p.codigo_barras || '').trim();
+        return ((u && u === eanStr) || (n && n === eanStr)) &&
+          String(p.ativo || 'SIM').toUpperCase() === 'SIM' &&
+          String(p.produto_teste || 'NAO').toUpperCase() !== 'SIM';
+      }) : null;
       if (!prod) return json(res, 404, { erro: 'Produto nao encontrado para este codigo de barras.', codigo_barras: ean });
       return json(res, 200, {
         id_produto: prod.id_produto, nome_interno: prod.nome_interno,

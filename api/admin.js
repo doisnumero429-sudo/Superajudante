@@ -59,6 +59,8 @@ export default async function handler(req, res) {
     if (recurso === 'produto-inativar') return await produtoInativar(req, res);
     if (recurso === 'produto-reativar') return await produtoReativar(req, res);
     if (recurso === 'auditoria-cadastro') return await auditoriaCadastro(req, res);
+    if (recurso === 'produto-historico') return await produtoHistorico(req, res);
+    if (recurso === 'movimentacao-detalhe') return await movimentacaoDetalhe(req, res);
     return json(res, 400, { erro: 'Recurso invalido.' });
   } catch (e) {
     return json(res, 500, { erro: e.message });
@@ -1094,4 +1096,62 @@ async function produtoReativar(req, res) {
 
   await updateRow('Produtos', id, { ...prod, ativo: 'SIM', atualizado_em: nowStr() });
   return json(res, 200, { ok: true, acao: 'reativado' });
+}
+
+// ---------- PRODUTO: HISTORICO ----------
+async function produtoHistorico(req, res) {
+  const idp = (req.query?.id_produto) || new URL(req.url, 'http://x').searchParams.get('id_produto');
+  if (!idp) return json(res, 400, { erro: 'Informe id_produto.' });
+  const [movs, notas, fornecedores] = await Promise.all([
+    readRows('Movimentacoes_Estoque'),
+    readRows('Notas_Fiscais').catch(() => []),
+    readRows('Fornecedores').catch(() => []),
+  ]);
+  const notaById = Object.fromEntries(notas.map((n) => [n.id_nota, n]));
+  const fornById = Object.fromEntries(fornecedores.map((f) => [f.id_fornecedor, f]));
+  const lista = movs
+    .filter((m) => m.id_produto === idp)
+    .sort((a, b) => String(b.data || '').localeCompare(String(a.data || '')))
+    .slice(0, 20)
+    .map((m) => {
+      const nota = m.id_nota ? notaById[m.id_nota] : null;
+      const forn = nota ? fornById[nota.fornecedor_id] : null;
+      return {
+        id_movimentacao: m.id_movimentacao,
+        data: m.data,
+        tipo: m.tipo,
+        quantidade: m.quantidade,
+        custo_unitario: m.custo_unitario,
+        valor_total: m.valor_total,
+        origem: m.origem,
+        motivo: m.motivo,
+        observacao: m.observacao,
+        numero_nota: nota?.numero_nota || '',
+        nome_fornecedor: forn?.razao_social || nota?.cnpj_fornecedor || '',
+      };
+    });
+  return json(res, 200, { rows: lista });
+}
+
+// ---------- MOVIMENTACAO: DETALHE ----------
+async function movimentacaoDetalhe(req, res) {
+  const idm = (req.query?.id_movimentacao) || new URL(req.url, 'http://x').searchParams.get('id_movimentacao');
+  if (!idm) return json(res, 400, { erro: 'Informe id_movimentacao.' });
+  const movs = await readRows('Movimentacoes_Estoque');
+  const m = movs.find((x) => x.id_movimentacao === idm);
+  if (!m) return json(res, 404, { erro: 'Movimentacao nao encontrada.' });
+  const [prods, notas, fornecedores] = await Promise.all([
+    readRows('Produtos').catch(() => []),
+    readRows('Notas_Fiscais').catch(() => []),
+    readRows('Fornecedores').catch(() => []),
+  ]);
+  const produto = prods.find((p) => p.id_produto === m.id_produto);
+  const nota = m.id_nota ? notas.find((n) => n.id_nota === m.id_nota) : null;
+  const fornecedor = nota ? fornecedores.find((f) => f.id_fornecedor === nota.fornecedor_id) : null;
+  return json(res, 200, {
+    movimentacao: m,
+    produto: produto ? { nome_interno: produto.nome_interno, unidade_estoque: produto.unidade_estoque, id_produto: produto.id_produto } : null,
+    nota: nota ? { numero_nota: nota.numero_nota, data_emissao: nota.data_emissao, valor_total_nota: nota.valor_total_nota, chave_nfe: nota.chave_nfe } : null,
+    fornecedor: fornecedor ? { razao_social: fornecedor.razao_social, cnpj: fornecedor.cnpj } : null,
+  });
 }

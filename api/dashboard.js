@@ -30,12 +30,11 @@ export default async function handler(req, res) {
     const totalAberto = abertas.reduce((s, c) => s + parseFloat(c.valor || 0), 0);
     const pendentes = contas.filter((c) => String(c.status).toUpperCase() === 'PENDENTE_INFO');
 
-    const ultimasMov = movs.slice(-10).reverse();
-
     // Consumo dos ultimos 30 dias: soma das SAIDAs por produto.
     const corte = new Date(hoje); corte.setDate(corte.getDate() - 30);
     const corteStr = `${corte.getFullYear()}-${String(corte.getMonth() + 1).padStart(2, '0')}-${String(corte.getDate()).padStart(2, '0')}`;
     const nomeProd = Object.fromEntries(produtos.map((p) => [p.id_produto, p.nome_interno || p.descricao_original_nf]));
+    const ultimasMov = movs.slice(-10).reverse().map((m) => ({ ...m, nome_produto: nomeProd[m.id_produto] || '' }));
     const consumo = {};
     for (const m of movs) {
       if (String(m.tipo).toUpperCase() !== 'SAIDA') continue;

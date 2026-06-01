@@ -18,6 +18,7 @@
 //   recurso=produto-excluir       POST { id_produto } -> exclui definitivamente ou inativa
 //   recurso=produto-inativar      POST { id_produto } -> inativa produto
 //   recurso=produto-reativar      POST { id_produto } -> reativa produto inativo
+//   recurso=auditoria-cadastro    GET  -> detecta inconsistencias (sem categoria, duplicados, sem embalagem)
 
 import { readRows, appendRow, updateRow, nextId, readConfig, deleteAllRows, deleteRow, deleteRowsWhere } from './_lib/db.js';
 import { normalizarDesc } from './_lib/parser.js';
@@ -55,6 +56,7 @@ export default async function handler(req, res) {
     if (recurso === 'produto-excluir') return await produtoExcluir(req, res);
     if (recurso === 'produto-inativar') return await produtoInativar(req, res);
     if (recurso === 'produto-reativar') return await produtoReativar(req, res);
+    if (recurso === 'auditoria-cadastro') return await auditoriaCadastro(req, res);
     return json(res, 400, { erro: 'Recurso invalido.' });
   } catch (e) {
     return json(res, 500, { erro: e.message });
@@ -75,6 +77,39 @@ async function garantirCategoria(nome, cache) {
   await appendRow('Categorias', { id_categoria: id, nome_categoria: n, descricao: '', ativo: 'SIM' });
   if (cache) cache.push({ id_categoria: id, nome_categoria: n, ativo: 'SIM' });
   return id;
+}
+
+// Retorna o nome de referência do objeto (aceita nome_interno ou produto_interno)
+function getNomeRef(obj) {
+  return String(obj.nome_interno || obj.produto_interno || obj.nome || obj.produto || obj.chave || '').trim();
+}
+
+// Valida categoria_id contra cats reais; se invalido/ausente, tenta resolver pelo nome
+async function resolverCategoria(p, cats) {
+  if (p.categoria_id) {
+    const catExiste = cats.find((c) => c.id_categoria === p.categoria_id && String(c.ativo || 'SIM').toUpperCase() === 'SIM');
+    if (catExiste) return p.categoria_id;
+  }
+  if (p.categoria) return await garantirCategoria(p.categoria, cats);
+  return '';
+}
+
+// Registra múltiplas chaves no mapa id_produto
+function registrarIdPorChave(map, obj, id) {
+  const keys = [obj.chave, obj.nome_interno, obj.produto_interno, obj.nome, obj.produto, getNomeRef(obj)];
+  for (const k of keys) { if (k) map[String(k)] = id; }
+}
+
+// Resolve id_produto a partir de múltiplos campos possíveis
+function resolverIdProduto(obj, map) {
+  return obj.id_produto
+    || map[String(obj.chave || '')]
+    || map[String(obj.nome_interno || '')]
+    || map[String(obj.produto_interno || '')]
+    || map[String(obj.nome || '')]
+    || map[String(obj.produto || '')]
+    || map[getNomeRef(obj)]
+    || null;
 }
 
 // ---------- CATEGORIAS ----------
@@ -451,7 +486,7 @@ function validarCatalogo(j) {
   if (embs === null) erros.push('"embalagens_confirmadas" deve ser um array.');
 
   (produtos || []).forEach((p, i) => {
-    if (!String(p.nome_interno || '').trim()) erros.push(`Produto #${i + 1}: falta nome_interno.`);
+    if (!String(p.nome_interno || p.produto_interno || '').trim()) erros.push(`Produto #${i + 1}: falta nome_interno (ou produto_interno).`);
     if (!String(p.categoria || p.categoria_id || '').trim()) erros.push(`Produto #${i + 1}: falta categoria.`);
     if (!String(p.unidade_estoque || p.unidade_base || '').trim()) erros.push(`Produto #${i + 1}: falta unidade base.`);
   });
@@ -496,26 +531,39 @@ async function treinoImportar(req, res) {
   const { erros } = validarCatalogo(j);
   if (erros.length) return json(res, 400, { erro: 'O arquivo tem informacoes faltando. Corrija antes de importar.', erros });
 
-  const substituir = b.substituir === true; // se true, sobrescreve confirmados
+  const substituir = b.substituir === true;
   const agora = nowStr();
-  const relatorio = { produtos_criados: 0, produtos_atualizados: 0, mapeamentos_criados: 0, embalagens_criadas: 0, aliases_criados: 0, conflitos: [] };
+  const relatorio = {
+    produtos_criados: 0, produtos_atualizados: 0, conflitos: [],
+    mapeamentos_criados: 0, mapeamentos_conflito: 0,
+    embalagens_criadas: 0,
+    aliases_criados: 0, aliases_sem_produto: [],
+    categoria_id_invalida: [],
+  };
 
   const produtos = await readRows('Produtos');
   const cats = await readRows('Categorias');
   const pfTodos = await readRows('Produto_Fornecedor');
   const embsTodas = await readRows('Embalagens');
 
-  // mapa "chave do produto no JSON" -> id_produto real
+  // mapa "chave/nome do produto no JSON" -> id_produto real (multiplas chaves por produto)
   const idPorChave = {};
 
   for (const p of (j.produtos_confirmados || [])) {
-    const nome = String(p.nome_interno || '').trim();
-    const categoriaId = p.categoria_id || (p.categoria ? await garantirCategoria(p.categoria, cats) : '');
+    const nome = getNomeRef(p);
+    if (!nome) {
+      relatorio.conflitos.push({ nome_interno: '?', motivo: 'nome_interno ausente no JSON.' });
+      continue;
+    }
+    const categoriaId = await resolverCategoria(p, cats);
+    if (p.categoria_id && !categoriaId) {
+      relatorio.categoria_id_invalida.push({ nome_interno: nome, categoria_id_recebida: p.categoria_id });
+    }
+    const confirmado = (nome && categoriaId) ? 'SIM' : 'NAO';
     const unidade = String(p.unidade_estoque || p.unidade_base || 'UN').toUpperCase();
     const cnpj = String(p.cnpj_fornecedor || '').replace(/\D/g, '');
     const codigo = String(p.codigo_produto_nf || p.codigo_produto_fornecedor || '');
 
-    // tenta localizar produto existente
     let alvo = null;
     if (p.id_produto) alvo = produtos.find((x) => x.id_produto === p.id_produto);
     if (!alvo && cnpj && codigo) {
@@ -527,17 +575,17 @@ async function treinoImportar(req, res) {
       const jaConfirmado = String(alvo.confirmado || 'NAO').toUpperCase() === 'SIM';
       if (jaConfirmado && !substituir) {
         relatorio.conflitos.push({ id_produto: alvo.id_produto, nome_interno: alvo.nome_interno, motivo: 'Produto ja confirmado.' });
-        idPorChave[p.chave || nome] = alvo.id_produto;
+        registrarIdPorChave(idPorChave, p, alvo.id_produto);
         continue;
       }
       await updateRow('Produtos', alvo.id_produto, {
         ...alvo, nome_interno: nome || alvo.nome_interno,
         categoria_id: categoriaId || alvo.categoria_id,
         unidade_estoque: unidade || alvo.unidade_estoque,
-        confirmado: 'SIM', atualizado_em: agora,
+        confirmado, atualizado_em: agora,
       });
       relatorio.produtos_atualizados += 1;
-      idPorChave[p.chave || nome] = alvo.id_produto;
+      registrarIdPorChave(idPorChave, p, alvo.id_produto);
     } else {
       const id = await nextId('Produtos', 'id_produto', 'PRD');
       const novo = {
@@ -547,19 +595,26 @@ async function treinoImportar(req, res) {
         unidade_compra: p.unidade_nfe || unidade, unidade_estoque: unidade,
         quantidade_por_embalagem: 1, fator_conversao: 1,
         estoque_minimo: parseFloat(p.estoque_minimo) || 0, estoque_atual: 0,
-        ultimo_custo_unitario: 0, custo_medio: 0, ativo: 'SIM', confirmado: 'SIM',
+        ultimo_custo_unitario: 0, custo_medio: 0, ativo: 'SIM', confirmado,
         observacoes: '', criado_em: agora, atualizado_em: agora,
       };
       await appendRow('Produtos', novo);
       produtos.push(novo);
       relatorio.produtos_criados += 1;
-      idPorChave[p.chave || nome] = id;
+      registrarIdPorChave(idPorChave, p, id);
+
+      // Auto-cria embalagem base (fator 1) para o produto novo se ainda nao houver
+      const jaTemEmb = embsTodas.some((e) => e.id_produto === id && String(e.ativo || 'SIM').toUpperCase() === 'SIM');
+      if (!jaTemEmb) {
+        await garantirEmbalagem(id, { fator: 1, sigla: unidade, unidade_base: unidade, descricao: `${unidade} x1` }, embsTodas);
+        relatorio.embalagens_criadas += 1;
+      }
     }
   }
 
-  // embalagens
+  // embalagens (vindas do JSON do ChatGPT)
   for (const e of (j.embalagens_confirmadas || [])) {
-    const idp = e.id_produto || idPorChave[e.produto || e.chave || e.nome_interno];
+    const idp = resolverIdProduto(e, idPorChave);
     if (!idp) continue;
     const antes = embsTodas.length;
     await garantirEmbalagem(idp, e, embsTodas);
@@ -568,13 +623,26 @@ async function treinoImportar(req, res) {
 
   // mapeamentos fornecedor/produto
   for (const m of (j.mapeamentos_confirmados || [])) {
-    const idp = m.id_produto || idPorChave[m.produto || m.chave || m.nome_interno];
-    if (!idp) continue;
+    const idp = resolverIdProduto(m, idPorChave);
+    if (!idp) {
+      relatorio.conflitos.push({ nome: getNomeRef(m) || '?', motivo: 'Mapeamento: produto nao localizado pelo nome/chave.' });
+      continue;
+    }
     const cnpj = String(m.cnpj_fornecedor || '').replace(/\D/g, '');
     const codigo = String(m.codigo_produto_nf || m.codigo_produto_fornecedor || '');
+
+    // Detecta conflito: mesmo CNPJ+codigo ja mapeado para produto DIFERENTE
+    const conflito = pfTodos.find((x) =>
+      String(x.cnpj_fornecedor).replace(/\D/g, '') === cnpj && String(x.codigo_produto_nf) === codigo
+      && x.id_produto !== idp && String(x.ativo || 'SIM').toUpperCase() === 'SIM');
+    if (conflito) {
+      relatorio.mapeamentos_conflito += 1;
+      relatorio.conflitos.push({ nome: getNomeRef(m), cnpj, codigo, motivo: `CNPJ+codigo ja mapeado para produto ${conflito.id_produto}.` });
+      continue;
+    }
+
     const existe = pfTodos.find((x) => x.id_produto === idp
-      && String(x.cnpj_fornecedor).replace(/\D/g, '') === cnpj
-      && String(x.codigo_produto_nf) === codigo);
+      && String(x.cnpj_fornecedor).replace(/\D/g, '') === cnpj && String(x.codigo_produto_nf) === codigo);
     if (existe) continue;
     const id = await nextId('Produto_Fornecedor', 'id_pf', 'PF');
     const nova = {
@@ -591,9 +659,16 @@ async function treinoImportar(req, res) {
 
   // aliases
   for (const a of (j.aliases_confirmados || [])) {
-    const idp = a.id_produto || idPorChave[a.produto || a.chave || a.nome_interno];
+    const idp = resolverIdProduto(a, idPorChave);
     const alias = String(a.alias || '').trim();
-    if (!idp || !alias) continue;
+    if (!idp) {
+      relatorio.aliases_sem_produto.push({ alias: alias || '?', motivo: 'Produto nao encontrado pelo nome/chave.' });
+      continue;
+    }
+    if (!alias) {
+      relatorio.aliases_sem_produto.push({ alias: '?', id_produto: idp, motivo: 'Campo alias vazio.' });
+      continue;
+    }
     const id = await nextId('Aliases_Produto', 'id_alias', 'AL');
     await appendRow('Aliases_Produto', {
       id_alias: id, id_produto: idp, alias, origem: a.origem || 'CHATGPT', ativo: 'SIM', criado_em: agora,
@@ -601,12 +676,12 @@ async function treinoImportar(req, res) {
     relatorio.aliases_criados += 1;
   }
 
-  // auditoria (best-effort: nao quebra a importacao se a tabela nao existir)
+  // auditoria (best-effort)
   try {
     const idImp = await nextId('Treino_Importacoes', 'id_importacao', 'TI');
     await appendRow('Treino_Importacoes', {
       id_importacao: idImp, criado_em: agora, origem: j.origem || 'chatgpt',
-      resumo: `prod+${relatorio.produtos_criados}/upd${relatorio.produtos_atualizados} map+${relatorio.mapeamentos_criados} emb+${relatorio.embalagens_criadas} ali+${relatorio.aliases_criados}`,
+      resumo: `prod+${relatorio.produtos_criados}/upd${relatorio.produtos_atualizados} map+${relatorio.mapeamentos_criados} emb+${relatorio.embalagens_criadas} ali+${relatorio.aliases_criados} conf=${relatorio.conflitos.length}`,
       json_original: JSON.stringify(j).slice(0, 45000),
       status: relatorio.conflitos.length ? 'COM_CONFLITOS' : 'OK',
       produtos_criados: relatorio.produtos_criados, mapeamentos_criados: relatorio.mapeamentos_criados,
@@ -616,6 +691,81 @@ async function treinoImportar(req, res) {
   } catch { /* tabela de auditoria opcional */ }
 
   return json(res, 200, { ok: true, relatorio });
+}
+
+// ---------- AUDITORIA DO CADASTRO ----------
+async function auditoriaCadastro(req, res) {
+  const [produtos, cats, pfTodos, embs, aliases] = await Promise.all([
+    readRows('Produtos'), readRows('Categorias'),
+    readRows('Produto_Fornecedor'), readRows('Embalagens'), readRows('Aliases_Produto'),
+  ]);
+
+  const catIds = new Set(cats.filter((c) => String(c.ativo || 'SIM').toUpperCase() === 'SIM').map((c) => c.id_categoria));
+  const prodById = Object.fromEntries(produtos.map((p) => [p.id_produto, p]));
+  const ativos = produtos.filter((p) =>
+    String(p.ativo || 'SIM').toUpperCase() === 'SIM' &&
+    String(p.produto_teste || 'NAO').toUpperCase() !== 'SIM');
+
+  const alertas = [];
+
+  // Produtos ativos sem categoria válida
+  for (const p of ativos) {
+    if (!p.categoria_id || !catIds.has(p.categoria_id))
+      alertas.push({ tipo: 'sem_categoria', id_produto: p.id_produto, nome_interno: p.nome_interno, detalhe: p.categoria_id || '' });
+  }
+
+  // Produtos ativos sem nenhum mapeamento (CNPJ no próprio registro vazio e sem linha em Produto_Fornecedor)
+  for (const p of ativos) {
+    const temCnpjDireto = !!String(p.cnpj_fornecedor || '').replace(/\D/g, '');
+    const temPf = pfTodos.some((pf) => pf.id_produto === p.id_produto && String(pf.ativo || 'SIM').toUpperCase() === 'SIM');
+    if (!temCnpjDireto && !temPf)
+      alertas.push({ tipo: 'sem_mapeamento', id_produto: p.id_produto, nome_interno: p.nome_interno });
+  }
+
+  // Conflito: mesmo CNPJ+código mapeado para dois produtos diferentes em Produto_Fornecedor
+  const chaveParaProd = {};
+  for (const pf of pfTodos) {
+    if (String(pf.ativo || 'SIM').toUpperCase() !== 'SIM') continue;
+    const cnpj = String(pf.cnpj_fornecedor || '').replace(/\D/g, '');
+    const codigo = String(pf.codigo_produto_nf || '');
+    if (!cnpj || !codigo) continue;
+    const chave = `${cnpj}|${codigo}`;
+    if (chaveParaProd[chave] && chaveParaProd[chave] !== pf.id_produto) {
+      alertas.push({
+        tipo: 'cnpj_codigo_duplicado', chave_duplicada: chave,
+        produto_a: chaveParaProd[chave], produto_b: pf.id_produto,
+        nome_a: prodById[chaveParaProd[chave]]?.nome_interno || '',
+        nome_b: prodById[pf.id_produto]?.nome_interno || '',
+      });
+    } else {
+      chaveParaProd[chave] = pf.id_produto;
+    }
+  }
+
+  // Produtos ativos sem embalagem cadastrada
+  for (const p of ativos) {
+    if (!embs.some((e) => e.id_produto === p.id_produto && String(e.ativo || 'SIM').toUpperCase() === 'SIM'))
+      alertas.push({ tipo: 'sem_embalagem', id_produto: p.id_produto, nome_interno: p.nome_interno });
+  }
+
+  // Aliases apontando para produto inexistente ou inativo
+  for (const a of aliases) {
+    if (String(a.ativo || 'SIM').toUpperCase() !== 'SIM') continue;
+    const prod = prodById[a.id_produto];
+    if (!prod || String(prod.ativo || 'SIM').toUpperCase() !== 'SIM')
+      alertas.push({ tipo: 'alias_produto_invalido', id_alias: a.id_alias, alias: a.alias, id_produto: a.id_produto });
+  }
+
+  const stats = {
+    total_produtos_ativos: ativos.length,
+    sem_categoria: alertas.filter((a) => a.tipo === 'sem_categoria').length,
+    sem_mapeamento: alertas.filter((a) => a.tipo === 'sem_mapeamento').length,
+    sem_embalagem: alertas.filter((a) => a.tipo === 'sem_embalagem').length,
+    cnpj_codigo_duplicado: alertas.filter((a) => a.tipo === 'cnpj_codigo_duplicado').length,
+    alias_produto_invalido: alertas.filter((a) => a.tipo === 'alias_produto_invalido').length,
+  };
+
+  return json(res, 200, { ok: true, stats, alertas });
 }
 
 // ---------- ESTEIRA DE TREINAMENTO: ADICIONAR NF-E ----------

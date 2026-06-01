@@ -3,9 +3,10 @@
 // para a tela de Conferencia. Marca produtos novos x ja conhecidos. NAO grava estoque.
 
 import { getXml } from '../_lib/meudanfe.js';
-import { parseNfe, descreverFormaPagamento, normalizarDesc } from '../_lib/parser.js';
+import { parseNfe, descreverFormaPagamento } from '../_lib/parser.js';
 import { readRows, readConfig } from '../_lib/db.js';
 import { json, preflight, validarChave, readBody } from '../_lib/util.js';
+import { encontrarProduto } from '../_lib/reconhecimento.js';
 
 export default async function handler(req, res) {
   if (preflight(req, res)) return;
@@ -38,41 +39,11 @@ export default async function handler(req, res) {
     try { pfRows = await readRows('Produto_Fornecedor'); } catch { /* tabela opcional */ }
     try { aliasRows = await readRows('Aliases_Produto'); } catch { /* tabela opcional */ }
     const cnpjForn = dados.fornecedor.cnpj;
-    const prodById = Object.fromEntries(produtos.map((p) => [p.id_produto, p]));
-
-    const acharProduto = (it) => {
-      const descNorm = normalizarDesc(it.descricao_original);
-      let p = produtos.find((x) => {
-        if (String(x.ativo || 'SIM').toUpperCase() !== 'SIM') return false;
-        if (String(x.produto_teste || 'NAO').toUpperCase() === 'SIM') return false;
-        const mesmoForn = String(x.cnpj_fornecedor).replace(/\D/g, '') === cnpjForn;
-        const porCodigo = mesmoForn && String(x.codigo_produto_nf) === String(it.codigo_produto_nf);
-        const porEan = it.codigo_barras && String(x.codigo_barras) === String(it.codigo_barras);
-        return porCodigo || porEan;
-      });
-      if (p) return p;
-      const pf = pfRows.find((x) => {
-        if (String(x.ativo || 'SIM').toUpperCase() !== 'SIM') return false;
-        const mesmoForn = String(x.cnpj_fornecedor).replace(/\D/g, '') === cnpjForn;
-        const porCodigo = mesmoForn && x.codigo_produto_nf && String(x.codigo_produto_nf) === String(it.codigo_produto_nf);
-        const porEan = it.codigo_barras && x.ean && String(x.ean) === String(it.codigo_barras);
-        const porDesc = mesmoForn && descNorm && String(x.descricao_normalizada) === descNorm;
-        return porCodigo || porEan || porDesc;
-      });
-      if (pf && prodById[pf.id_produto]) return prodById[pf.id_produto];
-      const al = aliasRows.find((a) => String(a.ativo || 'SIM').toUpperCase() === 'SIM'
-        && normalizarDesc(a.alias) === descNorm);
-      if (al && prodById[al.id_produto]) {
-        const pa = prodById[al.id_produto];
-        if (String(pa.ativo || 'SIM').toUpperCase() === 'SIM' && String(pa.produto_teste || 'NAO').toUpperCase() !== 'SIM') return pa;
-      }
-      return null;
-    };
 
     const itens = dados.itens.map((it) => {
-      const match = acharProduto(it);
-      if (match) {
-        // Usa o fator ja aprendido (se houver) em vez do detectado
+      const result = encontrarProduto(it, { produtos, pfRows, aliasRows, cnpjForn });
+      if (result) {
+        const { prod: match, metodo } = result;
         const fatorSalvo = parseFloat(match.fator_conversao) || it.fator_conversao;
         const qtdEstoque = it.quantidade_nf * fatorSalvo;
         return {
@@ -85,9 +56,10 @@ export default async function handler(req, res) {
           quantidade_estoque: qtdEstoque,
           custo_unitario_estoque: qtdEstoque > 0 ? Number((it.valor_total_nf / qtdEstoque).toFixed(6)) : 0,
           produto_novo: false,
+          metodo_reconhecimento: metodo,
         };
       }
-      return { ...it, id_produto: '', nome_interno: '', categoria_id: '', produto_novo: true };
+      return { ...it, id_produto: '', nome_interno: '', categoria_id: '', produto_novo: true, metodo_reconhecimento: null };
     });
 
     // Parcelas / contas a pagar previstas

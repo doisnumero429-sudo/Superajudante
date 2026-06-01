@@ -8,6 +8,7 @@ import {
 } from '../_lib/db.js';
 import { normalizarDesc } from '../_lib/parser.js';
 import { json, preflight, validarChave, readBody, nowStr } from '../_lib/util.js';
+import { encontrarProduto } from '../_lib/reconhecimento.js';
 
 export default async function handler(req, res) {
   if (preflight(req, res)) return;
@@ -88,24 +89,39 @@ export default async function handler(req, res) {
 
     // Recarrega produtos para cadastro/atualizacao
     let produtos = await readRows('Produtos');
-    // Mapeamentos fornecedor/produto (tabela nova da fase 2; opcional).
     let pfTodos = [];
+    let aliasRows = [];
     try { pfTodos = await readRows('Produto_Fornecedor'); } catch { /* tabela opcional */ }
+    try { aliasRows = await readRows('Aliases_Produto'); } catch { /* tabela opcional */ }
+
+    // Bloqueia produto_novo sem categoria (Correção 10)
+    const itensSemCategoria = itens.filter((it) => it.produto_novo && !it.categoria_id);
+    if (itensSemCategoria.length > 0) {
+      return json(res, 400, {
+        erro: 'Ha itens novos sem categoria definida. Preencha a categoria antes de confirmar.',
+        itens_sem_categoria: itensSemCategoria.map((it) => ({ codigo: it.codigo_produto_nf, descricao: it.descricao_original })),
+      });
+    }
 
     // 3) Itens: cadastra produtos novos, lanca item, movimentacao e atualiza estoque
     for (const it of itens) {
+      // Usa encontrarProduto (7 estrategias) para localizar o produto
       let prod = null;
-      if (it.id_produto) {
-        prod = produtos.find((p) => p.id_produto === it.id_produto);
-      }
-      if (!prod) {
-        // tenta achar por cnpj+codigo ou EAN (caso o frontend nao tenha mandado id)
-        prod = produtos.find((p) => {
-          const mesmoForn = String(p.cnpj_fornecedor).replace(/\D/g, '') === cnpjForn;
-          const porCodigo = mesmoForn && String(p.codigo_produto_nf) === String(it.codigo_produto_nf);
-          const porEan = it.codigo_barras && String(p.codigo_barras) === String(it.codigo_barras);
-          return porCodigo || porEan;
-        });
+      const resultado = encontrarProduto(it, { produtos, pfRows: pfTodos, aliasRows, cnpjForn });
+      if (resultado) prod = resultado.prod;
+
+      // Bloqueia criacao de duplicata por CNPJ+codigo (Correção 9)
+      if (!prod && it.produto_novo) {
+        const duplicata = pfTodos.find((x) =>
+          String(x.cnpj_fornecedor).replace(/\D/g, '') === cnpjForn &&
+          String(x.codigo_produto_nf) === String(it.codigo_produto_nf) &&
+          String(x.ativo || 'SIM').toUpperCase() === 'SIM');
+        if (duplicata) {
+          const prodExistente = produtos.find((p) => p.id_produto === duplicata.id_produto);
+          if (prodExistente) {
+            prod = prodExistente;
+          }
+        }
       }
 
       const fator = parseFloat(it.fator_conversao) || 1;

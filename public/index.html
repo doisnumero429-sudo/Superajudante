@@ -121,21 +121,26 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
 <!-- IMPORTAR -->
 <section class="view" id="v-import">
   <div class="card">
-    <h2 style="font-size:19px;margin-bottom:4px">Importar NF-e</h2>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="chip est-chip on" id="modo-treinar" onclick="setNfeModo('treinar')" style="flex:1;padding:10px;font-size:13px">🎓 Treinar NF-e</button>
+      <button class="chip est-chip" id="modo-entrada" onclick="setNfeModo('entrada')" style="flex:1;padding:10px;font-size:13px">📦 Dar Entrada</button>
+    </div>
+    <div id="nfe-modo-desc" style="font-size:13px;margin-bottom:14px;padding:10px;border-radius:10px"></div>
+    <h2 id="nfe-import-titulo" style="font-size:19px;margin-bottom:4px">Treinar NF-e</h2>
     <p class="muted small">Cole a chave de acesso de 44 dígitos.</p>
     <label>Chave de acesso</label>
     <input class="chave-input" id="chave" inputmode="numeric" maxlength="54" placeholder="0000 0000 0000 … (44 números)">
     <div class="small muted" id="chave-count" style="margin-top:6px">0 / 44 dígitos</div>
     <button class="btn-2" id="btn-scanner-nfe" style="width:100%;padding:13px;margin-top:10px" onclick="toggleScannerNFe()">📷 Escanear QR code da NF-e</button>
     <div class="scanner-wrap" id="scanner-nfe"></div>
-    <button class="btn" id="btn-buscar" onclick="buscarNfe()">Buscar nota</button>
+    <button class="btn" id="btn-buscar" onclick="buscarNfe()">Ler nota</button>
     <div class="status-box" id="status-box"></div>
     <hr>
     <details>
       <summary class="muted small" style="cursor:pointer">Já tenho o arquivo XML</summary>
       <label>Colar conteúdo do XML</label>
       <textarea id="xml-manual" rows="4" placeholder="<?xml version=..."></textarea>
-      <button class="btn-2" style="width:100%;padding:13px;margin-top:10px" onclick="enviarXmlManual()">Importar deste XML</button>
+      <button class="btn-2" style="width:100%;padding:13px;margin-top:10px" onclick="enviarXmlManual()">Ler este XML</button>
     </details>
   </div>
 </section>
@@ -393,6 +398,26 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
 <script>
 const API = window.Capacitor?.isNativePlatform?.() ? 'https://superajudante.vercel.app' : '';
 let confData = null, estoqueCache = [], _activeScan = null;
+let nfeModo = 'treinar'; // 'treinar' | 'entrada'
+
+function setNfeModo(modo){
+  nfeModo = modo;
+  const btnT = document.getElementById('modo-treinar');
+  const btnE = document.getElementById('modo-entrada');
+  const desc = document.getElementById('nfe-modo-desc');
+  const tit  = document.getElementById('nfe-import-titulo');
+  if(btnT) btnT.classList.toggle('on', modo==='treinar');
+  if(btnE) btnE.classList.toggle('on', modo==='entrada');
+  if(modo==='treinar'){
+    if(tit) tit.textContent='Treinar NF-e';
+    if(desc){ desc.style.background='rgba(128,255,180,.07)'; desc.style.border='1px solid rgba(128,255,180,.18)'; desc.style.color='var(--muted)';
+      desc.innerHTML='<b style="color:var(--fg)">Modo treinamento</b> — o sistema lê a nota e identifica produtos, mas <b>não altera o estoque</b>. Use esta tela para ensinar o sistema a reconhecer produtos das notas fiscais.'; }
+  } else {
+    if(tit) tit.textContent='Dar Entrada no Estoque';
+    if(desc){ desc.style.background='rgba(255,180,0,.07)'; desc.style.border='1px solid rgba(255,180,0,.25)'; desc.style.color='var(--warn)';
+      desc.innerHTML='<b>⚠ Modo entrada</b> — confirmar a nota vai <b>alterar quantidades, custo médio e criar contas a pagar</b>. Use somente quando a compra realmente entrou no estoque.'; }
+  }
+}
 
 function toast(msg, type=''){
   const t = document.getElementById('toast');
@@ -599,18 +624,40 @@ function renderConferencia(){
     html += `</div>`;
   });
 
-  html += `<div class="sec-title">Parcelas / Contas a pagar</div>`;
-  r.parcelas.forEach((p,i)=>{
-    html += `<div class="item"><div class="top">
-      <div><div class="desc">Parcela ${p.numero_parcela}</div>
-      <div class="meta">${p.forma_pagamento}</div></div>
-      <div style="text-align:right"><b style="font-family:Fraunces">${brl(p.valor)}</b>
-      ${p.status==='PENDENTE_INFO'?'<div><span class="badge b-wait">sem vencimento</span></div>':''}</div></div>
-      <label>Vencimento</label><input type="date" value="${p.vencimento||''}" onchange="confData.parcelas[${i}].vencimento=this.value;confData.parcelas[${i}].status='ABERTO'">
-    </div>`;
-  });
-  html += `<button class="btn" onclick="confirmarImportacao()">Confirmar e lançar no estoque</button>
-    <button class="btn-2" style="width:100%;padding:13px;margin-top:10px" onclick="nav('import')">Cancelar</button>`;
+  if(nfeModo === 'entrada'){
+    html += `<div class="sec-title">Parcelas / Contas a pagar</div>`;
+    r.parcelas.forEach((p,i)=>{
+      html += `<div class="item"><div class="top">
+        <div><div class="desc">Parcela ${p.numero_parcela}</div>
+        <div class="meta">${p.forma_pagamento}</div></div>
+        <div style="text-align:right"><b style="font-family:Fraunces">${brl(p.valor)}</b>
+        ${p.status==='PENDENTE_INFO'?'<div><span class="badge b-wait">sem vencimento</span></div>':''}</div></div>
+        <label>Vencimento</label><input type="date" value="${p.vencimento||''}" onchange="confData.parcelas[${i}].vencimento=this.value;confData.parcelas[${i}].status='ABERTO'">
+      </div>`;
+    });
+    html += `<div class="alertbar" style="margin-top:8px;margin-bottom:12px">⚠ Esta ação vai dar entrada no estoque e alterar quantidades. Confirme apenas se a compra realmente chegou.</div>
+      <button class="btn" onclick="confirmarImportacao()">✅ Confirmar entrada no estoque</button>
+      <button class="btn-2" style="width:100%;padding:13px;margin-top:10px" onclick="nav('import')">Cancelar</button>`;
+  } else {
+    const novos = r.itens.filter(it=>it.produto_novo).length;
+    const conf  = r.itens.length - novos;
+    html += `<div class="card" style="margin-top:16px">
+      <div style="font-weight:600;margin-bottom:6px">🎓 Treino — nota lida com sucesso</div>
+      <p class="muted small" style="margin-bottom:12px">Esta nota <b>não foi lançada no estoque</b>. Use os botões abaixo para treinar o sistema: ${conf} produto(s) já reconhecido(s), ${novos} produto(s) novo(s).</p>
+      <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="exportarContexto('treino-conf-box')">⬇ Exportar contexto atual</button>
+      <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="exportarDesconhecidos('treino-conf-box')">⬇ Exportar produtos desconhecidos</button>
+      <button class="btn-2" style="width:100%;padding:12px" onclick="copiarComandoGPT()">📋 Copiar comando para o ChatGPT</button>
+      <div id="treino-conf-box" class="muted small" style="margin-top:8px"></div>
+      <label style="margin-top:16px">Colar JSON revisado pelo ChatGPT</label>
+      <textarea id="treino-conf-json" rows="5" placeholder='{"schema_version":"1.0","tipo":"catalogo_revisado_gpt",...}'></textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn-2 btn-sm" style="width:100%;padding:11px" onclick="validarTreino('treino-conf-json','treino-conf-result')">Validar JSON</button>
+        <button class="btn-2 btn-sm" style="width:100%;padding:11px;background:var(--accent);color:#06120c" onclick="importarTreino(false,'treino-conf-json','treino-conf-result')">Importar aprendizado</button>
+      </div>
+      <div id="treino-conf-result" style="margin-top:10px"></div>
+    </div>
+    <button class="btn-2" style="width:100%;padding:13px;margin-top:12px" onclick="nav('import')">← Voltar</button>`;
+  }
   c.innerHTML = html;
   carregarCategoriasNosSelects();
 }
@@ -692,6 +739,22 @@ function pedirTexto(titulo, inicial=''){
   });
 }
 async function confirmarImportacao(){
+  const ok = await new Promise(resolve=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:24px';
+    ov.innerHTML=`<div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;width:100%;max-width:360px">
+      <div style="font-size:22px;text-align:center;margin-bottom:10px">📦</div>
+      <div style="font-weight:700;font-size:16px;margin-bottom:8px;text-align:center">Dar entrada no estoque?</div>
+      <p style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:20px">Esta ação vai <b style="color:var(--fg)">alterar quantidades, custo médio e criar contas a pagar</b>. Essa operação não pode ser desfeita facilmente.</p>
+      <div class="row">
+        <button class="btn-2 btn-sm" style="width:100%;padding:12px" id="_ci_cancel">Cancelar</button>
+        <button class="btn btn-sm" style="width:100%;padding:12px;background:var(--accent);color:#06120c" id="_ci_ok">Confirmar entrada</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#_ci_cancel').onclick=()=>{ ov.remove(); resolve(false); };
+    ov.querySelector('#_ci_ok').onclick=()=>{ ov.remove(); resolve(true); };
+  });
+  if(!ok) return;
   try{
     toast('Lançando no estoque…');
     const r = await api('/api/nfe/confirmar',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -1454,24 +1517,24 @@ async function baixarJson(nomeArquivo, obj){
     document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
   }catch(_){}
 }
-async function exportarContexto(){
-  const box=document.getElementById('treino-export');
-  box.textContent='Gerando contexto…';
+async function exportarContexto(boxId='treino-export'){
+  const box=document.getElementById(boxId);
+  if(box) box.textContent='Gerando contexto…';
   try{
     const d = await api('/api/admin?recurso=treino-contexto');
     await baixarJson('superajudante-contexto.json', d);
-    box.innerHTML = `✓ Contexto gerado e copiado. ${d.produtos_internos.length} produtos, ${d.produtos_pendentes.length} pendentes.`;
-  }catch(e){ box.textContent=e.message; }
+    if(box) box.innerHTML = `✓ Contexto gerado e copiado. ${d.produtos_internos.length} produtos, ${d.produtos_pendentes.length} pendentes.`;
+  }catch(e){ if(box) box.textContent=e.message; }
 }
-async function exportarDesconhecidos(){
-  const box=document.getElementById('treino-export');
-  box.textContent='Buscando produtos desconhecidos…';
+async function exportarDesconhecidos(boxId='treino-export'){
+  const box=document.getElementById(boxId);
+  if(box) box.textContent='Buscando produtos desconhecidos…';
   try{
     const d = await api('/api/admin?recurso=treino-desconhecidos');
-    if(!d.itens.length){ box.innerHTML='✓ Nenhum produto desconhecido. Tudo já está confirmado.'; return; }
+    if(!d.itens.length){ if(box) box.innerHTML='✓ Nenhum produto desconhecido. Tudo já está confirmado.'; return; }
     await baixarJson('superajudante-desconhecidos.json', d);
-    box.innerHTML = `✓ ${d.resumo.produtos_desconhecidos} produtos desconhecidos (de ${d.resumo.produtos_unicos} únicos) gerados e copiados.`;
-  }catch(e){ box.textContent=e.message; }
+    if(box) box.innerHTML = `✓ ${d.resumo.produtos_desconhecidos} produtos desconhecidos (de ${d.resumo.produtos_unicos} únicos) gerados e copiados.`;
+  }catch(e){ if(box) box.textContent=e.message; }
 }
 function copiarComandoGPT(){
   const comando = `Você é um assistente de cadastro de produtos de restaurante.
@@ -1506,27 +1569,29 @@ unidade_estoque é como controlo o estoque (UN, KG, L...); fator da embalagem = 
     .then(()=>toast('Comando copiado ✓','ok'))
     .catch(()=>toast('Não consegui copiar. Selecione manualmente.','err'));
 }
-function lerTreinoJson(){
-  const txt=document.getElementById('treino-json').value.trim();
+function lerTreinoJson(jsonId='treino-json'){
+  const el=document.getElementById(jsonId);
+  if(!el){ toast('Campo JSON não encontrado.','err'); return null; }
+  const txt=el.value.trim();
   if(!txt) { toast('Cole o JSON revisado pelo ChatGPT.','err'); return null; }
   return txt;
 }
-async function validarTreino(){
-  const txt=lerTreinoJson(); if(txt===null) return;
-  const box=document.getElementById('treino-result');
+async function validarTreino(jsonId='treino-json', boxId='treino-result'){
+  const txt=lerTreinoJson(jsonId); if(txt===null) return;
+  const box=document.getElementById(boxId);
   try{
     const r = await api('/api/admin?recurso=treino-validar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({json:txt})});
     if(r.ok){
-      box.innerHTML = `<div class="prev">✓ JSON válido. ${r.resumo.produtos} produtos, ${r.resumo.embalagens} embalagens, ${r.resumo.mapeamentos} mapeamentos, ${r.resumo.aliases} aliases.</div>`;
+      if(box) box.innerHTML = `<div class="prev">✓ JSON válido. ${r.resumo.produtos} produtos, ${r.resumo.embalagens} embalagens, ${r.resumo.mapeamentos} mapeamentos, ${r.resumo.aliases} aliases.</div>`;
     } else {
-      box.innerHTML = `<div class="alertbar">O arquivo tem informações faltando. Corrija antes de importar:<br>• ${r.erros.join('<br>• ')}</div>`;
+      if(box) box.innerHTML = `<div class="alertbar">O arquivo tem informações faltando. Corrija antes de importar:<br>• ${r.erros.join('<br>• ')}</div>`;
     }
-  }catch(e){ box.innerHTML=`<div class="alertbar">${e.message}</div>`; }
+  }catch(e){ if(box) box.innerHTML=`<div class="alertbar">${e.message}</div>`; }
 }
-async function importarTreino(substituir){
-  const txt=lerTreinoJson(); if(txt===null) return;
-  const box=document.getElementById('treino-result');
-  box.innerHTML='<div class="muted small">Importando…</div>';
+async function importarTreino(substituir, jsonId='treino-json', boxId='treino-result'){
+  const txt=lerTreinoJson(jsonId); if(txt===null) return;
+  const box=document.getElementById(boxId);
+  if(box) box.innerHTML='<div class="muted small">Importando…</div>';
   try{
     const r = await api('/api/admin?recurso=treino-importar',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({json:txt, substituir:!!substituir})});
@@ -1538,18 +1603,19 @@ async function importarTreino(substituir){
       html += `<div class="alertbar" style="margin-top:10px">⚠ ${rel.conflitos.length} produto(s) já possuem cadastro confirmado e não foram sobrescritos:<br>• `
         + rel.conflitos.map(c=>esc(c.nome_interno||c.id_produto)).join('<br>• ')
         + `<div class="row" style="margin-top:10px">
-            <button class="btn-2 btn-sm" style="width:100%;padding:10px" onclick="document.getElementById('treino-result').querySelector('.alertbar').remove()">Manter atuais</button>
-            <button class="btn-2 btn-sm" style="width:100%;padding:10px;background:var(--danger);color:#fff" onclick="importarTreino(true)">Substituir</button>
+            <button class="btn-2 btn-sm" style="width:100%;padding:10px" onclick="document.getElementById('${boxId}').querySelector('.alertbar').remove()">Manter atuais</button>
+            <button class="btn-2 btn-sm" style="width:100%;padding:10px;background:var(--danger);color:#fff" onclick="importarTreino(true,'${jsonId}','${boxId}')">Substituir</button>
           </div></div>`;
     }
-    box.innerHTML=html;
+    if(box) box.innerHTML=html;
     estoqueCache=[]; embCache={}; catCache=null;
   }catch(e){
     const erros = e.data?.erros;
-    box.innerHTML = `<div class="alertbar">${e.message}${erros?'<br>• '+erros.join('<br>• '):''}</div>`;
+    if(box) box.innerHTML = `<div class="alertbar">${e.message}${erros?'<br>• '+erros.join('<br>• '):''}</div>`;
   }
 }
 
+setNfeModo('treinar');
 loadDash();
 </script>
 

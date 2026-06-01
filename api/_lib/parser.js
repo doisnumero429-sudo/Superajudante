@@ -22,6 +22,17 @@ function arr(x) {
   return Array.isArray(x) ? x : [x];
 }
 
+// Normaliza uma descricao para comparacao/agrupamento: maiusculas, sem acentos,
+// espacos colapsados. Usado como fallback de reconhecimento (cnpj + descricao).
+export function normalizarDesc(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Classifica a unidade de compra (uCom) em PESO, VOLUME ou UNIDADE.
 // Para PESO/VOLUME, a quantidade da nota ja esta na propria unidade, entao
 // o fator de conversao deve ser 1 (entra direto no estoque na mesma unidade).

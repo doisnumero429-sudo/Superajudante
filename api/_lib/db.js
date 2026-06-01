@@ -27,6 +27,10 @@ export const TABLES = {
   Movimentacoes_Estoque: { table: 'movimentacoes_estoque',  pk: 'id_movimentacao' },
   Contas_Pagar:          { table: 'contas_pagar',           pk: 'id_conta' },
   Configuracoes:         { table: 'configuracoes',          pk: 'chave' },
+  Embalagens:            { table: 'embalagens',             pk: 'id_embalagem' },
+  Produto_Fornecedor:    { table: 'produto_fornecedor',     pk: 'id_pf' },
+  Aliases_Produto:       { table: 'aliases_produto',        pk: 'id_alias' },
+  Treino_Importacoes:    { table: 'treino_importacoes',     pk: 'id_importacao' },
 };
 
 export async function readRows(sheetName) {

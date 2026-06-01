@@ -57,10 +57,13 @@ export default async function handler(req, res) {
     resultado.checagens.supabase = { ok: false, erro: e.message };
   }
 
-  // 2b) IA (Gemini) — opcional. So informa se esta configurada.
-  resultado.checagens.ia_gemini = process.env.GEMINI_API_KEY
-    ? { ok: true, motivo: 'GEMINI_API_KEY definida. Sugestao de produtos com IA ativa.' }
-    : { ok: true, motivo: 'IA desativada (sem GEMINI_API_KEY). Opcional.' };
+  // 2b) IA por API foi removida do sistema. O reconhecimento de produtos e feito
+  // pelo proprio banco (CNPJ + codigo / EAN / aliases) e o treinamento e externo
+  // (exportar/importar JSON revisado no ChatGPT). Nao e mais um requisito do app.
+  resultado.checagens.ia_gemini = {
+    ok: true,
+    motivo: 'IA por API removida. O sistema usa treinamento externo com ChatGPT.',
+  };
 
   // 3) Meu Danfe: valida a Api-Key sem gastar credito.
   try {

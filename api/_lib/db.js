@@ -89,3 +89,17 @@ export async function deleteAllRows(sheetName) {
   const { error } = await getClient().from(meta.table).delete().gte(meta.pk, '');
   if (error) throw new Error(error.message);
 }
+
+export async function deleteRow(sheetName, pkValue) {
+  const meta = TABLES[sheetName];
+  if (!meta) throw new Error(`Tabela desconhecida: ${sheetName}`);
+  const { error } = await getClient().from(meta.table).delete().eq(meta.pk, pkValue);
+  if (error) throw new Error(error.message);
+}
+
+export async function deleteRowsWhere(sheetName, field, value) {
+  const meta = TABLES[sheetName];
+  if (!meta) throw new Error(`Tabela desconhecida: ${sheetName}`);
+  const { error } = await getClient().from(meta.table).delete().eq(field, value);
+  if (error) throw new Error(error.message);
+}

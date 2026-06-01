@@ -14,8 +14,12 @@
 //   recurso=treino-fila-listar    GET  -> lista fila com stats e desconhecidos agrupados
 //   recurso=treino-fila-limpar    POST -> limpa Treino_Fila e Treino_Itens (sem tocar estoque)
 //   recurso=treino-fila-pacote    GET  -> retorna contexto + desconhecidos da esteira para ChatGPT
+//   recurso=produto-verificar-historico GET ?id_produto -> verifica se produto tem historico
+//   recurso=produto-excluir       POST { id_produto } -> exclui definitivamente ou inativa
+//   recurso=produto-inativar      POST { id_produto } -> inativa produto
+//   recurso=produto-reativar      POST { id_produto } -> reativa produto inativo
 
-import { readRows, appendRow, updateRow, nextId, readConfig, deleteAllRows } from './_lib/db.js';
+import { readRows, appendRow, updateRow, nextId, readConfig, deleteAllRows, deleteRow, deleteRowsWhere } from './_lib/db.js';
 import { normalizarDesc } from './_lib/parser.js';
 import { entradaEstoque } from './_lib/estoque.js';
 import { json, preflight, readBody, nowStr } from './_lib/util.js';
@@ -47,6 +51,10 @@ export default async function handler(req, res) {
     if (recurso === 'treino-fila-listar') return await treinoFilaListar(req, res);
     if (recurso === 'treino-fila-limpar') return await treinoFilaLimpar(req, res);
     if (recurso === 'treino-fila-pacote') return await treinoFilaPacote(req, res);
+    if (recurso === 'produto-verificar-historico') return await produtoVerificarHistorico(req, res);
+    if (recurso === 'produto-excluir') return await produtoExcluir(req, res);
+    if (recurso === 'produto-inativar') return await produtoInativar(req, res);
+    if (recurso === 'produto-reativar') return await produtoReativar(req, res);
     return json(res, 400, { erro: 'Recurso invalido.' });
   } catch (e) {
     return json(res, 500, { erro: e.message });
@@ -302,7 +310,7 @@ async function entrada(req, res) {
 // NÃO altera: estoque_atual, custo_medio, ultimo_custo_unitario (apenas por entradas/saídas).
 const CAMPOS_EDITAVEIS = [
   'nome_interno', 'categoria_id', 'unidade_estoque',
-  'codigo_barras_unitario', 'preco_venda', 'estoque_minimo', 'observacoes',
+  'codigo_barras_unitario', 'preco_venda', 'estoque_minimo', 'observacoes', 'produto_teste',
 ];
 
 async function produtoEditar(req, res) {
@@ -335,7 +343,7 @@ async function treinoContexto(req, res) {
     readRows('Produto_Fornecedor'), readRows('Embalagens'), readRows('Aliases_Produto'),
     readConfig(),
   ]);
-  const ativos = produtos.filter((p) => String(p.ativo || 'SIM').toUpperCase() === 'SIM');
+  const ativos = produtos.filter((p) => String(p.ativo || 'SIM').toUpperCase() === 'SIM' && String(p.produto_teste || 'NAO').toUpperCase() !== 'SIM');
   const pendentes = ativos.filter((p) => String(p.confirmado || 'NAO').toUpperCase() !== 'SIM');
 
   return json(res, 200, {
@@ -368,7 +376,7 @@ async function treinoDesconhecidos(req, res) {
     readRows('Produtos'), readRows('Itens_Nota'), readRows('Notas_Fiscais'),
     readRows('Fornecedores'), readConfig(),
   ]);
-  const ativos = produtos.filter((p) => String(p.ativo || 'SIM').toUpperCase() === 'SIM');
+  const ativos = produtos.filter((p) => String(p.ativo || 'SIM').toUpperCase() === 'SIM' && String(p.produto_teste || 'NAO').toUpperCase() !== 'SIM');
   const pendentes = ativos.filter((p) => String(p.confirmado || 'NAO').toUpperCase() !== 'SIM');
   const conhecidos = ativos.length - pendentes.length;
 
@@ -747,7 +755,7 @@ async function treinoFilaPacote(req, res) {
     readRows('Produto_Fornecedor'), readRows('Embalagens'), readRows('Aliases_Produto'),
     readConfig(),
   ]);
-  const ativos = produtos.filter((p) => String(p.ativo || 'SIM').toUpperCase() === 'SIM');
+  const ativos = produtos.filter((p) => String(p.ativo || 'SIM').toUpperCase() === 'SIM' && String(p.produto_teste || 'NAO').toUpperCase() !== 'SIM');
   const contexto = {
     schema_version: '1.0', tipo: 'contexto_super_ajudante',
     sistema: 'Super Ajudante Estoque', restaurante: cfg.NOME_RESTAURANTE || 'Araçá Grill',
@@ -828,4 +836,84 @@ async function treinoFilaPacote(req, res) {
   }
 
   return json(res, 200, { tem_esteira: temEsteira, contexto, desconhecidos });
+}
+
+// ---------- PRODUTO: VERIFICAR HISTÓRICO ----------
+async function produtoVerificarHistorico(req, res) {
+  const id = (req.query?.id_produto) || new URL(req.url, 'http://x').searchParams.get('id_produto');
+  if (!id) return json(res, 400, { erro: 'Informe o id_produto.' });
+
+  const produtos = await readRows('Produtos');
+  const prod = produtos.find((p) => p.id_produto === id);
+  if (!prod) return json(res, 404, { erro: 'Produto nao encontrado.' });
+
+  let movs = [], itens = [];
+  try { movs = await readRows('Movimentacoes_Estoque'); } catch { /* ok */ }
+  try { itens = await readRows('Itens_Nota'); } catch { /* ok */ }
+
+  const temMovimentacao = movs.some((m) => m.id_produto === id);
+  const temItensNota = itens.some((i) => i.id_produto === id);
+  const temEstoqueAtual = parseFloat(prod.estoque_atual || 0) !== 0;
+  const temHistorico = temMovimentacao || temItensNota || temEstoqueAtual;
+
+  return json(res, 200, { tem_historico: temHistorico, tem_estoque: temEstoqueAtual, tem_movimentacao: temMovimentacao, tem_itens_nota: temItensNota });
+}
+
+// ---------- PRODUTO: EXCLUIR / INATIVAR / REATIVAR ----------
+async function produtoExcluir(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { erro: 'Metodo nao permitido' });
+  const b = await readBody(req);
+  const id = b.id_produto;
+  if (!id) return json(res, 400, { erro: 'Informe o id_produto.' });
+
+  const produtos = await readRows('Produtos');
+  const prod = produtos.find((p) => p.id_produto === id);
+  if (!prod) return json(res, 404, { erro: 'Produto nao encontrado.' });
+
+  let movs = [], itens = [];
+  try { movs = await readRows('Movimentacoes_Estoque'); } catch { /* ok */ }
+  try { itens = await readRows('Itens_Nota'); } catch { /* ok */ }
+
+  const temMovimentacao = movs.some((m) => m.id_produto === id);
+  const temItensNota = itens.some((i) => i.id_produto === id);
+  const temEstoqueAtual = parseFloat(prod.estoque_atual || 0) !== 0;
+
+  if (temMovimentacao || temItensNota || temEstoqueAtual) {
+    await updateRow('Produtos', id, { ...prod, ativo: 'NAO', atualizado_em: nowStr() });
+    return json(res, 200, { ok: true, acao: 'inativado', motivo: temEstoqueAtual ? 'estoque' : 'historico' });
+  }
+
+  try { await deleteRowsWhere('Aliases_Produto', 'id_produto', id); } catch { /* ok se vazia */ }
+  try { await deleteRowsWhere('Embalagens', 'id_produto', id); } catch { /* ok se vazia */ }
+  try { await deleteRowsWhere('Produto_Fornecedor', 'id_produto', id); } catch { /* ok se vazia */ }
+  await deleteRow('Produtos', id);
+  return json(res, 200, { ok: true, acao: 'excluido' });
+}
+
+async function produtoInativar(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { erro: 'Metodo nao permitido' });
+  const b = await readBody(req);
+  const id = b.id_produto;
+  if (!id) return json(res, 400, { erro: 'Informe o id_produto.' });
+
+  const produtos = await readRows('Produtos');
+  const prod = produtos.find((p) => p.id_produto === id);
+  if (!prod) return json(res, 404, { erro: 'Produto nao encontrado.' });
+
+  await updateRow('Produtos', id, { ...prod, ativo: 'NAO', atualizado_em: nowStr() });
+  return json(res, 200, { ok: true, acao: 'inativado' });
+}
+
+async function produtoReativar(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { erro: 'Metodo nao permitido' });
+  const b = await readBody(req);
+  const id = b.id_produto;
+  if (!id) return json(res, 400, { erro: 'Informe o id_produto.' });
+
+  const produtos = await readRows('Produtos');
+  const prod = produtos.find((p) => p.id_produto === id);
+  if (!prod) return json(res, 404, { erro: 'Produto nao encontrado.' });
+
+  await updateRow('Produtos', id, { ...prod, ativo: 'SIM', atualizado_em: nowStr() });
+  return json(res, 200, { ok: true, acao: 'reativado' });
 }

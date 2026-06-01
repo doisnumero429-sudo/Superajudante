@@ -168,6 +168,9 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <div id="prod-status-badge" style="font-size:13px"></div>
   </div>
   <div class="card">
+    <div id="prod-inativo-banner" style="display:none;background:#fff8e1;border:1px solid #f9a825;border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px">
+      <b>⚠ Produto inativo.</b> Não aparece no estoque e não é usado para reconhecer notas fiscais nem no treinamento com ChatGPT.
+    </div>
     <h2 id="prod-form-titulo" style="font-size:17px;margin-bottom:4px;word-break:break-word"></h2>
     <p id="prod-faltando-msg" style="font-size:13px;color:var(--warn);margin-bottom:16px;min-height:0"></p>
 
@@ -213,6 +216,13 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <p class="muted small" style="margin-bottom:6px">Anotações internas sobre este produto.</p>
     <input id="prod-obs" placeholder="opcional">
 
+    <label>Produto de teste</label>
+    <p class="muted small" style="margin-bottom:6px">Marque como SIM quando criado apenas para teste. Produtos de teste não são enviados ao ChatGPT nem usados para reconhecer NF-es.</p>
+    <select id="prod-teste">
+      <option value="NAO">NÃO — produto real</option>
+      <option value="SIM">SIM — produto de teste</option>
+    </select>
+
     <!-- Dados avançados (somente consulta) -->
     <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:16px">
       <button id="btn-dados-av" class="btn-2 btn-sm" style="width:100%;padding:11px;text-align:left" onclick="toggleDadosAv()">▸ Dados avançados</button>
@@ -249,6 +259,12 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     </div>
 
     <button class="btn" style="margin-top:22px;width:100%;padding:15px;font-size:15px" onclick="salvarProduto()">Salvar alterações</button>
+    <button id="btn-reativar-prod" class="btn" style="display:none;margin-top:10px;width:100%;padding:15px;font-size:15px;background:#2e7d32;border-color:#2e7d32" onclick="reativarProduto()">✅ Reativar produto</button>
+
+    <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
+      <p class="muted small" style="margin-bottom:10px">Use esta opção para remover produtos cadastrados por teste ou erro. Se o produto já tiver histórico, ele será apenas inativado para não quebrar movimentações antigas.</p>
+      <button class="btn-2" style="width:100%;padding:13px;color:var(--danger,#d32f2f);border-color:var(--danger,#d32f2f)" onclick="excluirProduto()">🗑 Excluir produto</button>
+    </div>
   </div>
 </section>
 
@@ -830,20 +846,24 @@ async function loadEstoque(){
       api('/api/admin?recurso=categorias'),
     ]);
     catCache=catData.rows;
-    estoqueCache = prodData.rows.filter(p=>String(p.ativo).toUpperCase()==='SIM');
+    estoqueCache = prodData.rows;
     renderFiltros();
     filtrarEstoque();
   }catch(e){ document.getElementById('estoque-list').innerHTML=`<div class="empty">${e.message}</div>`; }
 }
 
 function renderFiltros(){
+  const temInativos=estoqueCache.some(p=>String(p.ativo||'SIM').toUpperCase()!=='SIM');
+  const temTeste=estoqueCache.some(p=>String(p.produto_teste||'NAO').toUpperCase()==='SIM');
   const chips=[
-    {id:'',label:'Todos'},
+    {id:'',label:'Ativos'},
     {id:'sem-ean',label:'Falta EAN'},
     {id:'abaixo-min',label:'Abaixo do mín.'},
     {id:'incompleto',label:'Incompleto'},
     {id:'nao-conf',label:'Não confirmado'},
   ];
+  if(temInativos) chips.push({id:'inativos',label:'Inativos'});
+  if(temTeste) chips.push({id:'produto-teste',label:'Prod. de teste'});
   if(catCache) catCache.filter(c=>String(c.ativo||'SIM').toUpperCase()==='SIM')
     .forEach(c=>chips.push({id:'cat:'+c.id_categoria, label:c.nome_categoria}));
   document.getElementById('est-filtros').innerHTML = chips.map(c=>
@@ -870,24 +890,35 @@ function renderEstoque(list){
   }
   el.innerHTML=list.map(p=>{
     const s=statusCadastro(p);
-    const baixo=p.estoque_minimo!==''&&parseFloat(p.estoque_minimo)>0&&parseFloat(p.estoque_atual)<=parseFloat(p.estoque_minimo);
-    const sub=s.faltando.length ? `Falta: ${s.faltando.slice(0,2).join(', ')}` : `Custo méd. ${brl(p.custo_medio)} · mín ${p.estoque_minimo||'—'}`;
-    return `<div class="list-row" style="cursor:pointer" onclick="abrirProduto('${p.id_produto}')">
-      <div style="flex:1;min-width:0"><div class="t">${badgeEstoque(p)} ${esc(p.nome_interno||p.descricao_original_nf||'—')}</div>
+    const inativo=String(p.ativo||'SIM').toUpperCase()!=='SIM';
+    const teste=String(p.produto_teste||'NAO').toUpperCase()==='SIM';
+    const baixo=!inativo&&p.estoque_minimo!==''&&parseFloat(p.estoque_minimo)>0&&parseFloat(p.estoque_atual)<=parseFloat(p.estoque_minimo);
+    const prefixBadge=(inativo?'<span style="font-size:11px;background:#f5f5f5;border:1px solid #ccc;border-radius:4px;padding:1px 5px;margin-right:4px;color:#888">Inativo</span>':'')
+      +(teste?'<span style="font-size:11px;background:#fff8e1;border:1px solid #f9a825;border-radius:4px;padding:1px 5px;margin-right:4px;color:#8a6d00">Teste</span>':'');
+    const sub=inativo?'Produto inativo':(s.faltando.length ? `Falta: ${s.faltando.slice(0,2).join(', ')}` : `Custo méd. ${brl(p.custo_medio)} · mín ${p.estoque_minimo||'—'}`);
+    return `<div class="list-row" style="cursor:pointer;${inativo?'opacity:.6':''}" onclick="abrirProduto('${p.id_produto}')">
+      <div style="flex:1;min-width:0"><div class="t">${prefixBadge}${badgeEstoque(p)} ${esc(p.nome_interno||p.descricao_original_nf||'—')}</div>
       <div class="s">${sub}</div></div>
       <div class="v" style="${baixo?'color:var(--danger)':''}">
-        ${arred(p.estoque_atual)} <span class="muted small">${p.unidade_estoque||''}</span></div></div>`;
+        ${inativo?'':arred(p.estoque_atual)} <span class="muted small">${inativo?'':p.unidade_estoque||''}</span></div></div>`;
   }).join('');
 }
 
 function filtrarEstoque(){
   const q=document.getElementById('busca-estoque').value.toLowerCase();
   let list=estoqueCache.filter(p=>(p.nome_interno||p.descricao_original_nf||'').toLowerCase().includes(q));
-  if(estoqueFiltro==='sem-ean') list=list.filter(p=>!p.codigo_barras_unitario);
-  else if(estoqueFiltro==='abaixo-min') list=list.filter(p=>p.estoque_minimo&&parseFloat(p.estoque_minimo)>0&&parseFloat(p.estoque_atual)<=parseFloat(p.estoque_minimo));
-  else if(estoqueFiltro==='incompleto') list=list.filter(p=>statusCadastro(p).nivel!=='ok');
-  else if(estoqueFiltro==='nao-conf') list=list.filter(p=>String(p.confirmado||'NAO').toUpperCase()!=='SIM');
-  else if(estoqueFiltro.startsWith('cat:')) list=list.filter(p=>p.categoria_id===estoqueFiltro.slice(4));
+  if(estoqueFiltro==='inativos'){
+    list=list.filter(p=>String(p.ativo||'SIM').toUpperCase()!=='SIM');
+  } else if(estoqueFiltro==='produto-teste'){
+    list=list.filter(p=>String(p.produto_teste||'NAO').toUpperCase()==='SIM');
+  } else {
+    list=list.filter(p=>String(p.ativo||'SIM').toUpperCase()==='SIM');
+    if(estoqueFiltro==='sem-ean') list=list.filter(p=>!p.codigo_barras_unitario);
+    else if(estoqueFiltro==='abaixo-min') list=list.filter(p=>p.estoque_minimo&&parseFloat(p.estoque_minimo)>0&&parseFloat(p.estoque_atual)<=parseFloat(p.estoque_minimo));
+    else if(estoqueFiltro==='incompleto') list=list.filter(p=>statusCadastro(p).nivel!=='ok');
+    else if(estoqueFiltro==='nao-conf') list=list.filter(p=>String(p.confirmado||'NAO').toUpperCase()!=='SIM');
+    else if(estoqueFiltro.startsWith('cat:')) list=list.filter(p=>p.categoria_id===estoqueFiltro.slice(4));
+  }
   renderEstoque(list);
 }
 
@@ -912,12 +943,18 @@ async function abrirProduto(id){
   document.getElementById('prod-preco').value=prod.preco_venda||'';
   document.getElementById('prod-minimo').value=prod.estoque_minimo||'';
   document.getElementById('prod-obs').value=prod.observacoes||'';
+  document.getElementById('prod-teste').value=String(prod.produto_teste||'NAO').toUpperCase()==='SIM'?'SIM':'NAO';
 
   // Status badge
   const s=statusCadastro(prod);
   const labels={ok:'✅ Cadastro completo',warn:'🟡 Falta informação importante',err:'🔴 Falta informação obrigatória'};
   document.getElementById('prod-status-badge').textContent=labels[s.nivel];
   document.getElementById('prod-faltando-msg').textContent=s.faltando.length?`Falta: ${s.faltando.join(', ')}` : '';
+
+  // Inactive state
+  const inativo=String(prod.ativo||'SIM').toUpperCase()!=='SIM';
+  document.getElementById('prod-inativo-banner').style.display=inativo?'block':'none';
+  document.getElementById('btn-reativar-prod').style.display=inativo?'block':'none';
 
   // Dados avançados (leitura — campos fixos do produto)
   document.getElementById('prod-desc-nf').value=prod.descricao_original_nf||'';
@@ -985,6 +1022,7 @@ async function salvarProduto(){
     preco_venda:parseFloat(document.getElementById('prod-preco').value)||0,
     estoque_minimo:parseFloat(document.getElementById('prod-minimo').value)||0,
     observacoes:document.getElementById('prod-obs').value.trim(),
+    produto_teste:document.getElementById('prod-teste').value,
   };
   if(!payload.nome_interno){ toast('Informe o nome do produto.','err'); return; }
   try{
@@ -997,6 +1035,92 @@ async function salvarProduto(){
     nav('estoque');
   }catch(e){ toast(e.message,'err'); }
 }
+
+async function excluirProduto(){
+  const prod=produtoEditCtx?.prod;
+  if(!prod){ toast('Nenhum produto aberto.','err'); return; }
+  const id=prod.id_produto;
+  const nome=prod.nome_interno||prod.descricao_original_nf||id;
+
+  // Consulta o histórico antes de mostrar o dialog correto
+  let temHistorico=false, temEstoque=false;
+  try{
+    const h=await api('/api/admin?recurso=produto-verificar-historico&id_produto='+encodeURIComponent(id));
+    temHistorico=h.tem_historico; temEstoque=h.tem_estoque;
+  }catch(e){ toast(e.message,'err'); return; }
+
+  const titulo=temHistorico?'Inativar produto?':'Excluir produto definitivamente?';
+  const corpo=temHistorico
+    ?`Este produto possui histórico de ${temEstoque?'estoque':'movimentações ou notas fiscais'}. Ele não será apagado para não quebrar relatórios. <b>Deseja inativá-lo?</b>`
+    :`Este produto não possui histórico. Ele pode ser excluído definitivamente. <b>Deseja excluir?</b>`;
+  const btnLabel=temHistorico?'Inativar produto':'Excluir definitivamente';
+
+  const ok=await new Promise(resolve=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:24px';
+    ov.innerHTML=`<div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;width:100%;max-width:380px">
+      <div style="font-size:22px;text-align:center;margin-bottom:10px">${temHistorico?'⚠️':'🗑'}</div>
+      <div style="font-weight:700;font-size:16px;margin-bottom:8px;text-align:center">${titulo}</div>
+      <p style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:6px">"${esc(nome)}"</p>
+      <p style="font-size:12px;text-align:center;margin-bottom:20px">${corpo}</p>
+      <div class="row"><button class="btn-2 btn-sm" style="width:100%;padding:12px" id="_ep_cancel">Cancelar</button>
+      <button class="btn-2 btn-sm" style="width:100%;padding:12px;background:var(--danger,#d32f2f);color:#fff;border-color:var(--danger,#d32f2f)" id="_ep_ok">${btnLabel}</button></div></div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#_ep_cancel').onclick=()=>{ ov.remove(); resolve(false); };
+    ov.querySelector('#_ep_ok').onclick=()=>{ ov.remove(); resolve(true); };
+  });
+  if(!ok) return;
+
+  try{
+    const r=await api('/api/admin?recurso=produto-excluir',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({id_produto:id})});
+    if(r.acao==='excluido'){
+      toast('Produto excluído definitivamente.','ok');
+      estoqueCache=estoqueCache.filter(p=>p.id_produto!==id);
+    } else {
+      toast('Produto inativado — histórico preservado.','ok');
+      const idx=estoqueCache.findIndex(p=>p.id_produto===id);
+      if(idx>=0) estoqueCache[idx]={...estoqueCache[idx],ativo:'NAO'};
+    }
+    renderFiltros();
+    filtrarEstoque();
+    nav('estoque');
+  }catch(e){ toast(e.message,'err'); }
+}
+
+async function reativarProduto(){
+  const prod=produtoEditCtx?.prod;
+  if(!prod){ toast('Nenhum produto aberto.','err'); return; }
+  const id=prod.id_produto;
+
+  const ok=await new Promise(resolve=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:24px';
+    ov.innerHTML=`<div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;width:100%;max-width:360px">
+      <div style="font-size:22px;text-align:center;margin-bottom:10px">✅</div>
+      <div style="font-weight:700;font-size:16px;margin-bottom:8px;text-align:center">Reativar produto?</div>
+      <p style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:20px">O produto voltará a aparecer no estoque, nas buscas e no reconhecimento de notas.</p>
+      <div class="row"><button class="btn-2 btn-sm" style="width:100%;padding:12px" id="_rp_cancel">Cancelar</button>
+      <button class="btn btn-sm" style="width:100%;padding:12px" id="_rp_ok">Reativar</button></div></div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#_rp_cancel').onclick=()=>{ ov.remove(); resolve(false); };
+    ov.querySelector('#_rp_ok').onclick=()=>{ ov.remove(); resolve(true); };
+  });
+  if(!ok) return;
+
+  try{
+    await api('/api/admin?recurso=produto-reativar',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({id_produto:id})});
+    toast('Produto reativado ✓','ok');
+    const idx=estoqueCache.findIndex(p=>p.id_produto===id);
+    if(idx>=0){ estoqueCache[idx]={...estoqueCache[idx],ativo:'SIM'}; produtoEditCtx.prod=estoqueCache[idx]; }
+    document.getElementById('prod-inativo-banner').style.display='none';
+    document.getElementById('btn-reativar-prod').style.display='none';
+    renderFiltros();
+    filtrarEstoque();
+  }catch(e){ toast(e.message,'err'); }
+}
+
 /* embalagens por produto (cache) */
 let embCache = {};
 let contasFiltro = '';
@@ -1020,10 +1144,11 @@ async function carregarCatSelect(elId, manterValor){
 const prodLabel = p => `${p.nome_interno||p.descricao_original_nf} (${arred(p.estoque_atual)} ${p.unidade_estoque||''})`;
 
 /* SAÍDA */
+const prodAtivos = () => estoqueCache.filter(p=>String(p.ativo||'SIM').toUpperCase()==='SIM'&&String(p.produto_teste||'NAO').toUpperCase()!=='SIM');
 async function loadSaida(){
   if(!estoqueCache.length) await loadEstoque();
   const sel=document.getElementById('saida-prod');
-  sel.innerHTML = estoqueCache.map(p=>`<option value="${p.id_produto}">${prodLabel(p)}</option>`).join('');
+  sel.innerHTML = prodAtivos().map(p=>`<option value="${p.id_produto}">${prodLabel(p)}</option>`).join('');
   document.getElementById('saida-data').value = hojeISO();
   await loadEmbalagensSaida();
 }
@@ -1070,7 +1195,7 @@ let entradaModo='existente';
 async function loadEntrada(){
   if(!estoqueCache.length) await loadEstoque();
   const sel=document.getElementById('ent-prod');
-  sel.innerHTML = estoqueCache.map(p=>`<option value="${p.id_produto}">${prodLabel(p)}</option>`).join('');
+  sel.innerHTML = prodAtivos().map(p=>`<option value="${p.id_produto}">${prodLabel(p)}</option>`).join('');
   document.getElementById('ent-data').value = hojeISO();
   await carregarCatSelect('ent-cat');
   document.getElementById('ent-qtd').oninput = atualizarPreviewEntrada;

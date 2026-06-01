@@ -358,8 +358,8 @@ async function loadDash(){
       <div class="stat ${d.produtos_estoque_baixo>0?'alert':''}"><div class="n">${d.produtos_estoque_baixo}</div><div class="l">Estoque baixo</div></div>
       <div class="stat"><div class="n" style="font-size:22px">${brl(d.valor_estimado_estoque)}</div><div class="l">Valor em estoque</div></div>
       <div class="stat"><div class="n">${d.notas_no_mes}</div><div class="l">Notas no mês</div></div>
-      <div class="stat ${d.contas_vencidas>0?'alert':''}"><div class="n">${d.contas_vencidas}</div><div class="l">Contas vencidas</div></div>
-      <div class="stat warn"><div class="n">${d.contas_vencendo_7dias}</div><div class="l">Vencem em 7 dias</div></div>
+      <div class="stat ${d.contas_vencidas>0?'alert':''}" style="cursor:pointer" onclick="navContas('vencidas')"><div class="n">${d.contas_vencidas}</div><div class="l">Contas vencidas ›</div></div>
+      <div class="stat warn" style="cursor:pointer" onclick="navContas('7dias')"><div class="n">${d.contas_vencendo_7dias}</div><div class="l">Vencem em 7 dias ›</div></div>
       <div class="stat"><div class="n" style="font-size:22px">${brl(d.total_em_aberto)}</div><div class="l">Total em aberto</div></div>
       <div class="stat ${d.contas_pendentes_info>0?'warn':''}"><div class="n">${d.contas_pendentes_info}</div><div class="l">Pendentes de info</div></div>`;
     document.getElementById('dash-baixo').innerHTML = d.lista_estoque_baixo.length
@@ -636,6 +636,9 @@ function filtrarEstoque(){
 }
 /* embalagens por produto (cache) */
 let embCache = {};
+let contasFiltro = '';
+const FORMAS_PAGAR = ['Dinheiro','Pix','Cartão de Débito','Cartão de Crédito','TED/Transferência','Boleto'];
+let pagCtx = {id:'', forma:'', data:''};
 async function getEmbalagens(idProduto){
   if(!idProduto) return [];
   if(embCache[idProduto]) return embCache[idProduto];
@@ -976,13 +979,13 @@ async function ajustarInventario(id){
 }
 
 /* CONTAS */
+function navContas(filtro){ contasFiltro = filtro || ''; nav('contas'); }
+
 async function loadContas(){
   try{
     const rows = (await api('/api/listar?aba=Contas_Pagar')).rows;
     const el = document.getElementById('contas-list');
     const hoje = new Date(); hoje.setHours(0,0,0,0);
-    const abertas = rows.filter(c=>['ABERTO','PENDENTE_INFO'].includes(String(c.status).toUpperCase()));
-    if(!abertas.length){ el.innerHTML='<div class="empty">Nenhuma conta em aberto.</div>'; return; }
     const cat = (c)=>{
       if(String(c.status).toUpperCase()==='PENDENTE_INFO') return {k:'pend',badge:'<span class="badge b-wait">sem vencimento</span>'};
       const v=new Date(c.vencimento);
@@ -994,18 +997,77 @@ async function loadContas(){
       if(v<=d7) return {k:'7',badge:'<span class="badge b-info">7 dias</span>'};
       return {k:'fut',badge:''};
     };
-    el.innerHTML = '<div class="card">' + abertas.map(c=>{
+    let abertas = rows.filter(c=>['ABERTO','PENDENTE_INFO'].includes(String(c.status).toUpperCase()));
+
+    // Filtro vindo do dashboard
+    let cabecalho = '';
+    if(contasFiltro === 'vencidas'){
+      abertas = abertas.filter(c=>cat(c).k==='venc');
+      cabecalho = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-weight:600;color:var(--danger)">Contas vencidas</span>
+        <button class="btn-2 btn-sm" style="padding:6px 14px" onclick="navContas('')">Ver todas</button></div>`;
+    } else if(contasFiltro === '7dias'){
+      abertas = abertas.filter(c=>cat(c).k==='7'||cat(c).k==='hoje');
+      cabecalho = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <span style="font-weight:600;color:var(--warn)">Vencem em 7 dias</span>
+        <button class="btn-2 btn-sm" style="padding:6px 14px" onclick="navContas('')">Ver todas</button></div>`;
+    }
+
+    if(!abertas.length){
+      el.innerHTML = cabecalho + '<div class="empty">Nenhuma conta encontrada.</div>';
+      return;
+    }
+    el.innerHTML = cabecalho + '<div class="card">' + abertas.map(c=>{
       const m=cat(c);
-      return `<div class="list-row"><div><div class="t">${c.descricao}</div>
-        <div class="s">Venc. ${fmtData(c.vencimento)} · ${c.forma_pagamento} ${m.badge}</div></div>
-        <div style="text-align:right"><div class="v">${brl(c.valor)}</div>
-        <button class="btn-2 btn-sm" style="margin-top:6px;padding:6px 12px;font-size:12px" onclick="pagar('${c.id_conta}')">Pagar</button></div></div>`;
+      return `<div class="list-row"><div style="flex:1;min-width:0"><div class="t">${esc(c.descricao||'—')}</div>
+        <div class="s">Venc. ${fmtData(c.vencimento)} · ${c.forma_pagamento||'—'} ${m.badge}</div></div>
+        <div style="text-align:right;flex-shrink:0;margin-left:12px"><div class="v">${brl(c.valor)}</div>
+        <button class="btn-2 btn-sm" style="margin-top:6px;padding:6px 12px;font-size:12px"
+          onclick="abrirPagamento('${c.id_conta}','${esc(c.descricao||'—')}',${parseFloat(c.valor)||0})">Pagar</button></div></div>`;
     }).join('') + '</div>';
   }catch(e){ document.getElementById('contas-list').innerHTML=`<div class="empty">${e.message}</div>`; }
 }
-async function pagar(id){
-  try{ await api('/api/contas/pagar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id_conta:id})});
-    toast('Conta marcada como paga ✓','ok'); loadContas();
+
+/* MODAL DE PAGAMENTO */
+function abrirPagamento(id, desc, valor){
+  pagCtx = {id, forma:'', data:''};
+  document.getElementById('pag-titulo').textContent = desc;
+  document.getElementById('pag-valor').textContent = brl(valor);
+  document.getElementById('pag-formas').innerHTML = FORMAS_PAGAR.map(f=>
+    `<button class="btn-2 btn-sm" style="padding:8px 14px;font-size:13px" onclick="setPagForma('${f}',this)">${f}</button>`
+  ).join('');
+  document.getElementById('pag-data').value = '';
+  document.getElementById('pag-btn-hoje').className = 'btn';
+  document.getElementById('pag-btn-hoje').style.cssText = 'white-space:nowrap;padding:10px 18px';
+  document.getElementById('modal-pagamento').style.display = 'flex';
+}
+function fecharPagamento(){ document.getElementById('modal-pagamento').style.display = 'none'; }
+function setPagForma(f, btn){
+  pagCtx.forma = f;
+  document.getElementById('pag-formas').querySelectorAll('button').forEach(b=>{
+    b.className='btn-2 btn-sm'; b.style.cssText='padding:8px 14px;font-size:13px';
+  });
+  btn.className='btn btn-sm'; btn.style.cssText='padding:8px 14px;font-size:13px';
+}
+function setPagHoje(){
+  pagCtx.data = '';
+  document.getElementById('pag-data').value = '';
+  document.getElementById('pag-btn-hoje').className = 'btn';
+}
+function setPagDataCustom(v){
+  if(!v) return;
+  pagCtx.data = v;
+  document.getElementById('pag-btn-hoje').className = 'btn-2';
+}
+async function confirmarPagamento(){
+  if(!pagCtx.forma){ toast('Selecione a forma de pagamento.','err'); return; }
+  const payload = {id_conta:pagCtx.id, forma_pagamento:pagCtx.forma};
+  if(pagCtx.data) payload.data_pagamento = pagCtx.data;
+  try{
+    await api('/api/contas/pagar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    fecharPagamento();
+    toast('Pagamento registrado ✓','ok');
+    loadContas();
   }catch(e){ toast(e.message,'err'); }
 }
 
@@ -1214,5 +1276,29 @@ async function importarTreino(substituir){
 
 loadDash();
 </script>
+
+<!-- Modal de pagamento -->
+<div id="modal-pagamento" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.65);align-items:flex-end;justify-content:center" onclick="if(event.target===this)fecharPagamento()">
+  <div style="background:var(--surface);width:100%;max-width:560px;border-radius:20px 20px 0 0;padding:24px 20px 36px">
+    <div style="width:40px;height:4px;background:var(--line);border-radius:4px;margin:0 auto 20px"></div>
+    <div class="t" id="pag-titulo" style="font-size:15px;font-weight:600;margin-bottom:2px"></div>
+    <div id="pag-valor" style="font-size:24px;font-weight:700;color:var(--accent);margin-bottom:20px"></div>
+
+    <label style="font-size:13px;color:var(--muted);font-weight:600;letter-spacing:.05em;text-transform:uppercase">Forma de pagamento</label>
+    <div id="pag-formas" style="display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 20px"></div>
+
+    <label style="font-size:13px;color:var(--muted);font-weight:600;letter-spacing:.05em;text-transform:uppercase">Data do pagamento</label>
+    <div style="display:flex;gap:8px;margin:10px 0 24px;align-items:center">
+      <button id="pag-btn-hoje" class="btn" style="white-space:nowrap;padding:10px 18px" onclick="setPagHoje()">Hoje</button>
+      <div style="color:var(--muted);font-size:13px">ou</div>
+      <input id="pag-data" type="date" style="flex:1;background:var(--surface2);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:14px" oninput="setPagDataCustom(this.value)">
+    </div>
+
+    <div style="display:flex;gap:10px">
+      <button class="btn-2" style="flex:1;padding:13px" onclick="fecharPagamento()">Cancelar</button>
+      <button class="btn" style="flex:2;padding:13px;font-size:15px" onclick="confirmarPagamento()">Confirmar pagamento</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

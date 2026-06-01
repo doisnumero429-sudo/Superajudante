@@ -6,6 +6,7 @@
 import {
   readRows, appendRow, updateRow, nextId,
 } from '../_lib/db.js';
+import { normalizarDesc } from '../_lib/parser.js';
 import { json, preflight, validarChave, readBody, nowStr } from '../_lib/util.js';
 
 export default async function handler(req, res) {
@@ -87,6 +88,9 @@ export default async function handler(req, res) {
 
     // Recarrega produtos para cadastro/atualizacao
     let produtos = await readRows('Produtos');
+    // Mapeamentos fornecedor/produto (tabela nova da fase 2; opcional).
+    let pfTodos = [];
+    try { pfTodos = await readRows('Produto_Fornecedor'); } catch { /* tabela opcional */ }
 
     // 3) Itens: cadastra produtos novos, lanca item, movimentacao e atualiza estoque
     for (const it of itens) {
@@ -147,6 +151,9 @@ export default async function handler(req, res) {
           ultimo_custo_unitario: Number(custoUnit.toFixed(4)),
           custo_medio: Number(custoUnit.toFixed(4)),
           ativo: 'SIM',
+          // Curado na tela de conferencia (nome + categoria) => confirmado.
+          // Sem curadoria, fica pendente e aparece para exportar ao ChatGPT.
+          confirmado: (it.nome_interno && it.categoria_id) ? 'SIM' : 'NAO',
           observacoes: '',
           criado_em: agora,
           atualizado_em: agora,
@@ -202,6 +209,37 @@ export default async function handler(req, res) {
         usuario: body.usuario || 'sistema',
         observacao: '',
       });
+
+      // Mapeamento fornecedor/produto (aprendizado): cnpj + codigo -> id_produto.
+      // Permite que varios codigos/CNPJs apontem para o mesmo produto interno.
+      // Best-effort: se a tabela ainda nao existir no Supabase, nao quebra a importacao.
+      try {
+        const jaMapeado = pfTodos.find((x) => x.id_produto === idProduto
+          && String(x.cnpj_fornecedor).replace(/\D/g, '') === cnpjForn
+          && String(x.codigo_produto_nf) === String(it.codigo_produto_nf));
+        if (jaMapeado) {
+          await updateRow('Produto_Fornecedor', jaMapeado.id_pf, {
+            ...jaMapeado,
+            vezes_utilizado: (parseFloat(jaMapeado.vezes_utilizado) || 0) + 1,
+            ultima_utilizacao: agora, atualizado_em: agora,
+          });
+        } else {
+          const idPf = await nextId('Produto_Fornecedor', 'id_pf', 'PF');
+          const novoPf = {
+            id_pf: idPf, id_produto: idProduto, cnpj_fornecedor: cnpjForn,
+            nome_fornecedor: fornecedor.razao_social || '',
+            codigo_produto_nf: it.codigo_produto_nf || '', ean: it.codigo_barras || '',
+            descricao_original: it.descricao_original || '',
+            descricao_normalizada: normalizarDesc(it.descricao_original),
+            unidade_nf: it.unidade_nf || '',
+            confirmado_pelo_usuario: (it.nome_interno && it.categoria_id) ? 'SIM' : 'NAO',
+            origem_confirmacao: 'NFE', vezes_utilizado: 1, ultima_utilizacao: agora,
+            ativo: 'SIM', criado_em: agora, atualizado_em: agora,
+          };
+          await appendRow('Produto_Fornecedor', novoPf);
+          pfTodos.push(novoPf);
+        }
+      } catch { /* tabela produto_fornecedor opcional (fase 2) */ }
     }
 
     // 4) Contas a pagar

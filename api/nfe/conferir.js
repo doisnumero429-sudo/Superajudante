@@ -3,7 +3,7 @@
 // para a tela de Conferencia. Marca produtos novos x ja conhecidos. NAO grava estoque.
 
 import { getXml } from '../_lib/meudanfe.js';
-import { parseNfe, descreverFormaPagamento } from '../_lib/parser.js';
+import { parseNfe, descreverFormaPagamento, normalizarDesc } from '../_lib/parser.js';
 import { readRows, readConfig } from '../_lib/db.js';
 import { json, preflight, validarChave, readBody } from '../_lib/util.js';
 
@@ -28,17 +28,44 @@ export default async function handler(req, res) {
         ? `Atencao: a nota e destinada ao CNPJ ${dados.destinatario.cnpj}, diferente do restaurante (${cnpjRest}).`
         : null;
 
-    // Reconhecimento de produtos ja cadastrados (aprendizado por CNPJ + cProd / EAN)
+    // Reconhecimento de produtos ja cadastrados. Estrategias, em ordem:
+    //   1) produto por CNPJ + codigo, ou por EAN
+    //   2) mapeamento produto_fornecedor (cnpj+codigo, EAN ou descricao normalizada)
+    //   3) alias (descricao alternativa / cardapio)
     const produtos = await readRows('Produtos');
+    // Tabelas novas (fase 2). Se ainda nao foram criadas no Supabase, segue sem elas.
+    let pfRows = []; let aliasRows = [];
+    try { pfRows = await readRows('Produto_Fornecedor'); } catch { /* tabela opcional */ }
+    try { aliasRows = await readRows('Aliases_Produto'); } catch { /* tabela opcional */ }
     const cnpjForn = dados.fornecedor.cnpj;
+    const prodById = Object.fromEntries(produtos.map((p) => [p.id_produto, p]));
 
-    const itens = dados.itens.map((it) => {
-      const match = produtos.find((p) => {
-        const mesmoForn = String(p.cnpj_fornecedor).replace(/\D/g, '') === cnpjForn;
-        const porCodigo = mesmoForn && String(p.codigo_produto_nf) === String(it.codigo_produto_nf);
-        const porEan = it.codigo_barras && String(p.codigo_barras) === String(it.codigo_barras);
+    const acharProduto = (it) => {
+      const descNorm = normalizarDesc(it.descricao_original);
+      let p = produtos.find((x) => {
+        const mesmoForn = String(x.cnpj_fornecedor).replace(/\D/g, '') === cnpjForn;
+        const porCodigo = mesmoForn && String(x.codigo_produto_nf) === String(it.codigo_produto_nf);
+        const porEan = it.codigo_barras && String(x.codigo_barras) === String(it.codigo_barras);
         return porCodigo || porEan;
       });
+      if (p) return p;
+      const pf = pfRows.find((x) => {
+        if (String(x.ativo || 'SIM').toUpperCase() !== 'SIM') return false;
+        const mesmoForn = String(x.cnpj_fornecedor).replace(/\D/g, '') === cnpjForn;
+        const porCodigo = mesmoForn && x.codigo_produto_nf && String(x.codigo_produto_nf) === String(it.codigo_produto_nf);
+        const porEan = it.codigo_barras && x.ean && String(x.ean) === String(it.codigo_barras);
+        const porDesc = mesmoForn && descNorm && String(x.descricao_normalizada) === descNorm;
+        return porCodigo || porEan || porDesc;
+      });
+      if (pf && prodById[pf.id_produto]) return prodById[pf.id_produto];
+      const al = aliasRows.find((a) => String(a.ativo || 'SIM').toUpperCase() === 'SIM'
+        && normalizarDesc(a.alias) === descNorm);
+      if (al && prodById[al.id_produto]) return prodById[al.id_produto];
+      return null;
+    };
+
+    const itens = dados.itens.map((it) => {
+      const match = acharProduto(it);
       if (match) {
         // Usa o fator ja aprendido (se houver) em vez do detectado
         const fatorSalvo = parseFloat(match.fator_conversao) || it.fator_conversao;

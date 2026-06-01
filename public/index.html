@@ -147,30 +147,81 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
 
 <!-- ESTOQUE -->
 <section class="view" id="v-estoque">
-  <div class="row" style="margin-bottom:14px">
-    <button class="btn-2 btn-sm" style="width:100%;padding:12px" onclick="nav('saida')">↓ Saída manual</button>
+  <div class="row" style="margin-bottom:10px">
+    <button class="btn-2 btn-sm" style="width:100%;padding:12px" onclick="nav('entrada')">↑ Entrada manual</button>
+    <button class="btn-2 btn-sm" style="width:100%;padding:12px" onclick="nav('saida')">↓ Saída</button>
     <button class="btn-2 btn-sm" style="width:100%;padding:12px" onclick="nav('inv')">⌗ Inventário</button>
   </div>
   <input id="busca-estoque" placeholder="Buscar produto…" oninput="filtrarEstoque()" style="margin-bottom:12px">
   <div class="card" id="estoque-list"><div class="empty">Carregando…</div></div>
 </section>
 
+<!-- ENTRADA MANUAL -->
+<section class="view" id="v-entrada">
+  <div class="card">
+    <h2 style="font-size:19px;margin-bottom:4px">Entrada manual</h2>
+    <p class="muted small">Dar entrada sem nota fiscal. Pode cadastrar um produto novo ou somar a um já existente.</p>
+    <div class="chips" style="margin-top:12px">
+      <button class="chip on" id="ent-chip-exist" onclick="setEntradaModo('existente')">Produto existente</button>
+      <button class="chip" id="ent-chip-novo" onclick="setEntradaModo('novo')">Produto novo</button>
+    </div>
+
+    <div id="ent-existente">
+      <label>Produto</label>
+      <select id="ent-prod" onchange="loadEmbalagensEntrada()"></select>
+    </div>
+
+    <div id="ent-novo" style="display:none">
+      <label>Nome do produto</label>
+      <input id="ent-nome" placeholder="Ex.: Coca-Cola 2L">
+      <label>Categoria</label>
+      <select id="ent-cat"><option value="">Categoria…</option></select>
+      <label>Controlar estoque em</label>
+      <input id="ent-unidade" placeholder="UN, KG, L…" value="UN">
+      <label>Fornecedor (opcional)</label>
+      <input id="ent-forn" placeholder="Nome do fornecedor">
+    </div>
+
+    <label>Como entrou?</label>
+    <select id="ent-emb" onchange="onEntEmbChange()"></select>
+    <div id="ent-emb-nova" style="display:none">
+      <div class="row">
+        <div><label>Nome da embalagem</label><input id="ent-emb-desc" placeholder="Caixa 6 UN"></div>
+        <div><label>Quantas unidades vêm dentro?</label><input id="ent-emb-fator" type="number" inputmode="decimal" placeholder="6"></div>
+      </div>
+    </div>
+
+    <label>Quantidade</label>
+    <input id="ent-qtd" type="number" inputmode="decimal" placeholder="0">
+    <div class="row">
+      <div><label>Custo total (opcional)</label><input id="ent-vtotal" type="number" inputmode="decimal" placeholder="R$"></div>
+      <div><label>ou custo por unidade</label><input id="ent-vunit" type="number" inputmode="decimal" placeholder="R$"></div>
+    </div>
+    <label>Data da entrada</label>
+    <input id="ent-data" type="date">
+    <label>Observação (opcional)</label>
+    <input id="ent-obs" placeholder="opcional">
+    <div class="prev" id="ent-preview" style="display:none"></div>
+    <button class="btn" onclick="darEntrada()">Registrar entrada</button>
+  </div>
+</section>
+
 <!-- SAÍDA -->
 <section class="view" id="v-saida">
   <div class="card">
-    <h2 style="font-size:19px">Saída de estoque</h2>
+    <h2 style="font-size:19px;margin-bottom:4px">Saída de estoque</h2>
+    <p class="muted small">Saiu = baixa do estoque. Sem motivo obrigatório.</p>
     <label>Produto</label>
-    <select id="saida-prod"></select>
+    <select id="saida-prod" onchange="loadEmbalagensSaida()"></select>
+    <label>Forma de saída</label>
+    <select id="saida-emb" onchange="atualizarPreviewSaida()"></select>
     <label>Quantidade</label>
-    <input id="saida-qtd" type="number" inputmode="decimal" placeholder="0">
-    <label>Motivo</label>
-    <select id="saida-motivo">
-      <option>venda</option><option>consumo interno</option><option>perda</option>
-      <option>quebra</option><option>vencimento</option><option>transferência</option>
-      <option>ajuste manual</option><option>outro</option>
-    </select>
+    <input id="saida-qtd" type="number" inputmode="decimal" placeholder="0" oninput="atualizarPreviewSaida()">
+    <label>Data</label>
+    <input id="saida-data" type="date">
     <label>Observação</label>
     <input id="saida-obs" placeholder="opcional">
+    <div class="prev" id="saida-preview" style="display:none"></div>
     <button class="btn" onclick="darSaida()">Registrar saída</button>
   </div>
 </section>
@@ -207,9 +258,20 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
   <div class="sec-title">Regras</div>
   <div class="card" id="config-regras"><div class="muted small">Carregando…</div></div>
 
-  <div class="sec-title">IA (Gemini)</div>
-  <div class="card" id="ia-status-card">
-    <div class="muted small">Verificando…</div>
+  <div class="sec-title">Treinamento com ChatGPT</div>
+  <div class="card">
+    <p class="muted small" style="margin-bottom:10px">O app não usa IA por API. Você treina o catálogo manualmente: exporte, revise no ChatGPT e cole o resultado de volta.</p>
+    <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="exportarContexto()">⬇ Exportar contexto atual</button>
+    <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="exportarDesconhecidos()">⬇ Exportar produtos desconhecidos</button>
+    <button class="btn-2" style="width:100%;padding:12px" onclick="copiarComandoGPT()">📋 Copiar comando para o GPT</button>
+    <div id="treino-export" class="muted small" style="margin-top:8px"></div>
+    <label style="margin-top:16px">Colar JSON revisado pelo ChatGPT</label>
+    <textarea id="treino-json" rows="5" placeholder='{"schema_version":"1.0","tipo":"catalogo_revisado_gpt",...}'></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn-2 btn-sm" style="width:100%;padding:11px" onclick="validarTreino()">Validar JSON</button>
+      <button class="btn-2 btn-sm" style="width:100%;padding:11px;background:var(--accent);color:#06120c" onclick="importarTreino(false)">Importar aprendizado</button>
+    </div>
+    <div id="treino-result" style="margin-top:10px"></div>
   </div>
 
   <div class="sec-title">Diagnóstico</div>
@@ -252,9 +314,25 @@ async function api(path, opts){
   return d;
 }
 const brl = n => 'R$ ' + (Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+/* Datas no padrão Brasil. O banco guarda ISO (AAAA-MM-DD ou AAAA-MM-DD HH:mm);
+   exibimos sempre DD/MM/AAAA e, quando há hora, DD/MM/AAAA HH:mm. */
+function fmtData(s){
+  if(!s) return '—';
+  const m = String(s).match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return `${m[3]}/${m[2]}/${m[1]}`;
+  const d = new Date(s); if(!isNaN(d)) return d.toLocaleDateString('pt-BR');
+  return String(s);
+}
+function fmtDataHora(s){
+  if(!s) return '—';
+  const m = String(s).match(/(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if(m) return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`;
+  return fmtData(s);
+}
+const hojeISO = () => { const d=new Date(); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; };
 const TITLES = {dash:['Painel','Visão geral'],import:['Importar NF-e','Buscar nota'],conf:['Conferência','Revisar antes de lançar'],
-  estoque:['Estoque','Produtos'],saida:['Saída','Baixa manual'],inv:['Inventário','Contagem'],contas:['Contas a pagar','Financeiro'],
-  config:['Configurações','Ajustes e categorias']};
+  estoque:['Estoque','Produtos'],entrada:['Entrada manual','Sem nota fiscal'],saida:['Saída','Baixa de estoque'],
+  inv:['Inventário','Contagem'],contas:['Contas a pagar','Financeiro'],config:['Configurações','Ajustes e categorias']};
 
 function nav(v){
   _stopActiveScan();
@@ -265,7 +343,8 @@ function nav(v){
   if(v==='dash') loadDash();
   if(v==='estoque') loadEstoque();
   if(v==='contas') loadContas();
-  if(v==='saida') loadProdSelect();
+  if(v==='saida') loadSaida();
+  if(v==='entrada') loadEntrada();
   if(v==='config') loadConfig();
   window.scrollTo(0,0);
 }
@@ -292,7 +371,7 @@ async function loadDash(){
     document.getElementById('dash-movs').innerHTML = d.ultimas_movimentacoes.length
       ? d.ultimas_movimentacoes.map(m=>{
           const ent=m.tipo==='ENTRADA'; const cor=ent?'var(--accent)':(m.tipo==='SAIDA'?'var(--danger)':'var(--muted)');
-          return `<div class="list-row"><div><div class="t">${m.tipo} · ${m.motivo||''}</div><div class="s">${m.data||''}</div></div><div class="v" style="color:${cor}">${ent?'+':(m.tipo==='SAIDA'?'−':'')}${m.quantidade}</div></div>`;
+          return `<div class="list-row"><div><div class="t">${m.tipo} · ${m.motivo||''}</div><div class="s">${fmtDataHora(m.data)}</div></div><div class="v" style="color:${cor}">${ent?'+':(m.tipo==='SAIDA'?'−':'')}${m.quantidade}</div></div>`;
         }).join('')
       : '<div class="muted small">Sem movimentações ainda.</div>';
   }catch(e){ document.getElementById('dash-stats').innerHTML = `<div class="empty">${e.message}</div>`; }
@@ -388,13 +467,11 @@ function renderConferencia(){
   html += `<div class="card">
     <h2 style="font-size:18px">${r.fornecedor.razao_social||'Fornecedor'}</h2>
     <div class="muted small">CNPJ ${r.fornecedor.cnpj} · NF ${r.nota.numero_nota}/${r.nota.serie}</div>
-    <hr><div class="row"><div><div class="muted small">Emissão</div><b>${r.nota.data_emissao||'—'}</b></div>
+    <hr><div class="row"><div><div class="muted small">Emissão</div><b>${fmtData(r.nota.data_emissao)}</b></div>
     <div><div class="muted small">Total</div><b style="font-family:Fraunces">${brl(r.nota.valor_total_nota)}</b></div></div>
   </div>`;
 
-  const temNovos = r.itens.some(it=>it.produto_novo);
   html += `<div class="sec-title">Produtos (${r.itens.length})</div>`;
-  if(temNovos) html += `<button class="btn-2" style="width:100%;padding:12px;margin-bottom:10px" onclick="sugerirComIA()">✨ Preencher novos com IA</button>`;
 
   r.itens.forEach((it,i)=>{
     initItemConf(it);
@@ -503,31 +580,6 @@ async function garantirCategoria(nome){
   catCache.push({id_categoria:r.id_categoria, nome_categoria:r.nome_categoria||nome, ativo:'SIM'});
   return r.id_categoria;
 }
-async function sugerirComIA(){
-  const novos = confData.itens.map((it,i)=>({i,it})).filter(x=>x.it.produto_novo);
-  if(!novos.length){ toast('Não há produtos novos para sugerir.','err'); return; }
-  toast('Consultando IA…');
-  try{
-    const r = await api('/api/admin?recurso=ia',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({itens:novos.map(x=>x.it)})});
-    const sug = r.sugestoes||[];
-    for(let k=0;k<novos.length;k++){
-      const s = sug[k]; if(!s) continue;
-      const it = novos[k].it;
-      if(s.nome_interno) it.nome_interno = s.nome_interno;
-      if(s.unidade_estoque) it.unidade_estoque = String(s.unidade_estoque).toUpperCase();
-      it._modo = s.eh_peso ? 'peso' : 'unidade';
-      it.fator_conversao = s.eh_peso ? 1 : (parseFloat(s.fator_conversao)||1);
-      if(s.categoria){ try{ it.categoria_id = await garantirCategoria(s.categoria); }catch(_){} }
-      recalcItem(it);
-    }
-    renderConferencia();
-    toast('Sugestões da IA aplicadas ✓','ok');
-  }catch(e){
-    if(e.status===503){ toast('IA não ativa. Configure GEMINI_API_KEY nas variáveis de ambiente do Vercel.','err'); return; }
-    toast(e.message,'err');
-  }
-}
 function pedirTexto(titulo, inicial=''){
   return new Promise(resolve=>{
     const ov = document.createElement('div');
@@ -582,21 +634,157 @@ function filtrarEstoque(){
   const q = document.getElementById('busca-estoque').value.toLowerCase();
   renderEstoque(estoqueCache.filter(p=>(p.nome_interno||p.descricao_original_nf||'').toLowerCase().includes(q)));
 }
-async function loadProdSelect(){
+/* embalagens por produto (cache) */
+let embCache = {};
+async function getEmbalagens(idProduto){
+  if(!idProduto) return [];
+  if(embCache[idProduto]) return embCache[idProduto];
+  try{ const r = await api('/api/admin?recurso=embalagens&id_produto='+encodeURIComponent(idProduto)); embCache[idProduto]=r.rows||[]; }
+  catch{ embCache[idProduto]=[]; }
+  return embCache[idProduto];
+}
+async function carregarCatSelect(elId, manterValor){
+  if(!catCache){ try{ catCache=(await api('/api/admin?recurso=categorias')).rows; }catch{ catCache=[]; } }
+  const ativas=(catCache||[]).filter(c=>String(c.ativo||'SIM').toUpperCase()==='SIM');
+  const sel=document.getElementById(elId); if(!sel) return;
+  const atual = manterValor ? sel.value : '';
+  sel.innerHTML='<option value="">Categoria…</option>'+ativas.map(c=>`<option value="${c.id_categoria}">${c.nome_categoria}</option>`).join('');
+  if(atual) sel.value=atual;
+}
+const prodLabel = p => `${p.nome_interno||p.descricao_original_nf} (${arred(p.estoque_atual)} ${p.unidade_estoque||''})`;
+
+/* SAÍDA */
+async function loadSaida(){
   if(!estoqueCache.length) await loadEstoque();
-  const sel = document.getElementById('saida-prod');
-  sel.innerHTML = estoqueCache.map(p=>`<option value="${p.id_produto}">${p.nome_interno||p.descricao_original_nf} (${p.estoque_atual})</option>`).join('');
+  const sel=document.getElementById('saida-prod');
+  sel.innerHTML = estoqueCache.map(p=>`<option value="${p.id_produto}">${prodLabel(p)}</option>`).join('');
+  document.getElementById('saida-data').value = hojeISO();
+  await loadEmbalagensSaida();
+}
+async function loadEmbalagensSaida(){
+  const id=document.getElementById('saida-prod').value;
+  const prod=estoqueCache.find(p=>p.id_produto===id);
+  const base=prod?.unidade_estoque||'UN';
+  const embs=await getEmbalagens(id);
+  const sel=document.getElementById('saida-emb');
+  sel.innerHTML = `<option value="1" data-desc="${esc(base)}">${esc(base)} (avulsa)</option>`
+    + embs.map(e=>`<option value="${e.fator}" data-desc="${esc(e.descricao)}">${esc(e.descricao)} (${e.fator} ${esc(e.unidade_base||base)})</option>`).join('');
+  atualizarPreviewSaida();
+}
+function atualizarPreviewSaida(){
+  const sel=document.getElementById('saida-emb');
+  const fator=parseFloat(sel.value)||1;
+  const qtd=parseFloat(document.getElementById('saida-qtd').value)||0;
+  const id=document.getElementById('saida-prod').value;
+  const base=estoqueCache.find(p=>p.id_produto===id)?.unidade_estoque||'unidades';
+  const prev=document.getElementById('saida-preview');
+  if(qtd>0){ prev.style.display='block'; prev.innerHTML=`Isso vai baixar <b>${arred(qtd*fator)} ${base}</b> do estoque.`; }
+  else prev.style.display='none';
 }
 async function darSaida(){
-  const id = document.getElementById('saida-prod').value;
-  const qtd = document.getElementById('saida-qtd').value;
+  const id=document.getElementById('saida-prod').value;
+  const qtd=document.getElementById('saida-qtd').value;
   if(!id||!qtd){ toast('Preencha produto e quantidade.','err'); return; }
+  const sel=document.getElementById('saida-emb');
+  const fator=parseFloat(sel.value)||1;
+  const embDesc=sel.options[sel.selectedIndex]?.dataset.desc||'';
   try{
-    const r = await api('/api/estoque/saida',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({id_produto:id,quantidade:qtd,motivo:document.getElementById('saida-motivo').value,observacao:document.getElementById('saida-obs').value})});
-    toast(`Saída registrada. Estoque: ${r.estoque_atual}`, r.alerta_negativo?'err':'ok');
+    const r=await api('/api/estoque/saida',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({id_produto:id,quantidade:qtd,fator,embalagem:embDesc,
+        data:document.getElementById('saida-data').value,observacao:document.getElementById('saida-obs').value})});
+    toast(`Saída de ${arred(r.quantidade_baixada)}. Estoque: ${arred(r.estoque_atual)}`, r.alerta_negativo?'err':'ok');
     document.getElementById('saida-qtd').value=''; document.getElementById('saida-obs').value='';
+    document.getElementById('saida-preview').style.display='none';
     estoqueCache=[];
+  }catch(e){ toast(e.message,'err'); }
+}
+
+/* ENTRADA MANUAL */
+let entradaModo='existente';
+async function loadEntrada(){
+  if(!estoqueCache.length) await loadEstoque();
+  const sel=document.getElementById('ent-prod');
+  sel.innerHTML = estoqueCache.map(p=>`<option value="${p.id_produto}">${prodLabel(p)}</option>`).join('');
+  document.getElementById('ent-data').value = hojeISO();
+  await carregarCatSelect('ent-cat');
+  document.getElementById('ent-qtd').oninput = atualizarPreviewEntrada;
+  document.getElementById('ent-emb-fator').oninput = atualizarPreviewEntrada;
+  document.getElementById('ent-unidade').oninput = ()=>{ if(entradaModo==='novo') loadEmbalagensEntrada(); };
+  setEntradaModo('existente');
+}
+function setEntradaModo(m){
+  entradaModo=m;
+  document.getElementById('ent-existente').style.display = m==='existente'?'block':'none';
+  document.getElementById('ent-novo').style.display = m==='novo'?'block':'none';
+  document.getElementById('ent-chip-exist').classList.toggle('on', m==='existente');
+  document.getElementById('ent-chip-novo').classList.toggle('on', m==='novo');
+  loadEmbalagensEntrada();
+}
+async function loadEmbalagensEntrada(){
+  const sel=document.getElementById('ent-emb');
+  let base='UN', embs=[];
+  if(entradaModo==='existente'){
+    const id=document.getElementById('ent-prod').value;
+    base=estoqueCache.find(p=>p.id_produto===id)?.unidade_estoque||'UN';
+    embs=await getEmbalagens(id);
+  } else { base=(document.getElementById('ent-unidade').value||'UN').toUpperCase(); }
+  sel.innerHTML = `<option value="base" data-fator="1">${esc(base)} (avulsa)</option>`
+    + embs.map(e=>`<option value="${e.id_embalagem}" data-fator="${e.fator}" data-desc="${esc(e.descricao)}">${esc(e.descricao)} (${e.fator})</option>`).join('')
+    + `<option value="__nova__">➕ Nova embalagem…</option>`;
+  onEntEmbChange();
+}
+function onEntEmbChange(){
+  const sel=document.getElementById('ent-emb');
+  document.getElementById('ent-emb-nova').style.display = sel.value==='__nova__'?'block':'none';
+  atualizarPreviewEntrada();
+}
+function entFator(){
+  const sel=document.getElementById('ent-emb');
+  if(sel.value==='__nova__') return parseFloat(document.getElementById('ent-emb-fator').value)||1;
+  return parseFloat(sel.options[sel.selectedIndex]?.dataset.fator)||1;
+}
+function atualizarPreviewEntrada(){
+  const fator=entFator();
+  const qtd=parseFloat(document.getElementById('ent-qtd').value)||0;
+  let base='UN';
+  if(entradaModo==='existente'){ const id=document.getElementById('ent-prod').value; base=estoqueCache.find(p=>p.id_produto===id)?.unidade_estoque||'UN'; }
+  else base=(document.getElementById('ent-unidade').value||'UN').toUpperCase();
+  const prev=document.getElementById('ent-preview');
+  if(qtd>0){ prev.style.display='block'; prev.innerHTML=`Isso vira no estoque: <b>${arred(qtd*fator)} ${base}</b>.`; }
+  else prev.style.display='none';
+}
+async function darEntrada(){
+  const body={ quantidade:document.getElementById('ent-qtd').value, data:document.getElementById('ent-data').value,
+    observacao:document.getElementById('ent-obs').value };
+  if(!body.quantidade||parseFloat(body.quantidade)<=0){ toast('Informe a quantidade.','err'); return; }
+  const vtotal=document.getElementById('ent-vtotal').value, vunit=document.getElementById('ent-vunit').value;
+  if(vtotal) body.valor_total=vtotal; else if(vunit) body.custo_unitario=vunit;
+  // embalagem
+  const sel=document.getElementById('ent-emb');
+  if(sel.value==='__nova__'){
+    const desc=document.getElementById('ent-emb-desc').value.trim();
+    const fator=parseFloat(document.getElementById('ent-emb-fator').value)||0;
+    if(!desc||fator<=0){ toast('Informe o nome da embalagem e quantas unidades vêm dentro.','err'); return; }
+    body.embalagem={descricao:desc, fator};
+  } else if(sel.value!=='base'){ body.id_embalagem=sel.value; }
+  // produto
+  if(entradaModo==='existente'){
+    body.id_produto=document.getElementById('ent-prod').value;
+    if(!body.id_produto){ toast('Escolha o produto.','err'); return; }
+  } else {
+    body.nome_interno=document.getElementById('ent-nome').value.trim();
+    if(!body.nome_interno){ toast('Informe o nome do produto.','err'); return; }
+    body.categoria_id=document.getElementById('ent-cat').value;
+    body.unidade_estoque=(document.getElementById('ent-unidade').value||'UN').toUpperCase();
+    const forn=document.getElementById('ent-forn').value.trim(); if(forn) body.fornecedor_nome=forn;
+    if(body.embalagem) body.embalagem.unidade_base=body.unidade_estoque;
+  }
+  try{
+    const r=await api('/api/admin?recurso=entrada',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    toast(`Entrada de ${arred(r.quantidade_base)} ${r.unidade_base}. Estoque: ${arred(r.estoque_atual)}`,'ok');
+    ['ent-qtd','ent-vtotal','ent-vunit','ent-obs','ent-nome','ent-emb-desc','ent-emb-fator'].forEach(idd=>{const el=document.getElementById(idd); if(el) el.value='';});
+    document.getElementById('ent-preview').style.display='none';
+    estoqueCache=[]; embCache={};
   }catch(e){ toast(e.message,'err'); }
 }
 
@@ -734,29 +922,56 @@ function toggleScannerNFe(){
     buscarNfe();
   }).catch(e=>{ btn.textContent='📷 Escanear QR code da NF-e'; toast(e.message,'err'); });
 }
+let invContagem = []; // [{desc, fator, qtd}]
 async function buscarPorEan(){
   const ean = document.getElementById('inv-ean').value.trim();
   if(!ean) return;
   const box = document.getElementById('inv-result');
   try{
     const p = await api('/api/estoque/inventario?codigo_barras='+encodeURIComponent(ean));
+    const base = p.unidade||'UN';
+    const embs = await getEmbalagens(p.id_produto);
+    // linhas de contagem: unidade avulsa + cada embalagem
+    invContagem = [{desc:`${base} (avulsa)`, fator:1, qtd:0}]
+      .concat(embs.map(e=>({desc:e.descricao, fator:parseFloat(e.fator)||1, qtd:0})));
     box.innerHTML = `<div class="card" style="margin-top:14px">
       <div class="t" style="font-weight:600">${p.nome_interno}</div>
-      <div class="muted small">Estoque no sistema: <b>${p.estoque_atual} ${p.unidade||''}</b></div>
-      <label>Quantidade contada</label>
-      <input type="number" id="inv-contada" inputmode="decimal" placeholder="0">
-      <button class="btn" onclick="ajustarInventario('${p.id_produto}',${p.estoque_atual})">Confirmar ajuste</button></div>`;
-  }catch(e){ box.innerHTML = `<div class="alertbar" style="margin-top:14px">${e.message}</div>`; }
+      <div class="muted small">Estoque no sistema: <b>${arred(p.estoque_atual)} ${base}</b></div>
+      <div id="inv-linhas" style="margin-top:10px"></div>
+      <div class="prev" id="inv-total" style="margin-top:12px"></div>
+      <button class="btn" onclick="ajustarInventario('${p.id_produto}')">Confirmar contagem</button>
+    </div>`;
+    renderInvLinhas(base);
+  }catch(e){ box.innerHTML = `<div class="alertbar" style="margin-top:14px">${e.message}</div>`; invContagem=[]; }
 }
-async function ajustarInventario(id, atual){
-  const contada = document.getElementById('inv-contada').value;
-  if(contada===''){ toast('Informe a quantidade contada.','err'); return; }
+function renderInvLinhas(base){
+  const el=document.getElementById('inv-linhas');
+  el.innerHTML = invContagem.map((l,i)=>`
+    <div class="list-row" style="padding:8px 0">
+      <div><div class="t">${esc(l.desc)}</div>${l.fator!==1?`<div class="s">= ${l.fator} ${base}</div>`:''}</div>
+      <div style="display:flex;gap:6px;align-items:center;flex:0 0 auto">
+        <button class="btn-2 btn-sm" style="padding:6px 12px" onclick="invMais(${i},-1,'${esc(base)}')">−</button>
+        <input class="chip-input" type="number" inputmode="decimal" value="${l.qtd}" style="width:70px!important" oninput="invSet(${i},this.value,'${esc(base)}')">
+        <button class="btn-2 btn-sm" style="padding:6px 12px" onclick="invMais(${i},1,'${esc(base)}')">+</button>
+      </div>
+    </div>`).join('');
+  invTotal(base);
+}
+function invMais(i, d, base){ invContagem[i].qtd = Math.max(0,(parseFloat(invContagem[i].qtd)||0)+d); renderInvLinhas(base); }
+function invSet(i, v, base){ invContagem[i].qtd = parseFloat(v)||0; invTotal(base); }
+function invTotal(base){
+  const total = invContagem.reduce((s,l)=>s+(parseFloat(l.qtd)||0)*l.fator,0);
+  const el=document.getElementById('inv-total');
+  if(el) el.innerHTML = `Contagem final: <b>${arred(total)} ${base}</b>`;
+}
+async function ajustarInventario(id){
+  const contada = invContagem.reduce((s,l)=>s+(parseFloat(l.qtd)||0)*l.fator,0);
   try{
     const r = await api('/api/estoque/inventario',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({id_produto:id,quantidade_contada:contada})});
-    toast(`Ajustado. Diferença: ${r.diferenca>0?'+':''}${r.diferenca}`,'ok');
+    toast(`Ajustado. Diferença: ${r.diferenca>0?'+':''}${arred(r.diferenca)}`,'ok');
     document.getElementById('inv-result').innerHTML=''; document.getElementById('inv-ean').value='';
-    estoqueCache=[];
+    invContagem=[]; estoqueCache=[];
   }catch(e){ toast(e.message,'err'); }
 }
 
@@ -782,7 +997,7 @@ async function loadContas(){
     el.innerHTML = '<div class="card">' + abertas.map(c=>{
       const m=cat(c);
       return `<div class="list-row"><div><div class="t">${c.descricao}</div>
-        <div class="s">Venc. ${c.vencimento||'—'} · ${c.forma_pagamento} ${m.badge}</div></div>
+        <div class="s">Venc. ${fmtData(c.vencimento)} · ${c.forma_pagamento} ${m.badge}</div></div>
         <div style="text-align:right"><div class="v">${brl(c.valor)}</div>
         <button class="btn-2 btn-sm" style="margin-top:6px;padding:6px 12px;font-size:12px" onclick="pagar('${c.id_conta}')">Pagar</button></div></div>`;
     }).join('') + '</div>';
@@ -818,7 +1033,7 @@ async function rodarDiagnostico(){
       ${linha('Banco Supabase', c.supabase)}
       ${c.supabase_key?linha('Chave do Supabase', c.supabase_key):''}
       ${linha('API Meu Danfe', c.meu_danfe)}
-      ${c.ia_gemini?linha('IA (Gemini)', c.ia_gemini):''}
+      ${c.ia_gemini?linha('Inteligência', c.ia_gemini):''}
       ${c.busca_real?linha('Busca real de NF-e', c.busca_real):''}
     </div>`;
   }catch(e){ box.innerHTML = `<div class="alertbar" style="margin-top:10px">${e.message}</div>`; }
@@ -826,11 +1041,11 @@ async function rodarDiagnostico(){
 
 /* CONFIGURAÇÕES */
 function rotuloConfig(k){
-  return {CNPJ_RESTAURANTE:'CNPJ do restaurante',MAX_TENTATIVAS_NFE:'Máx. tentativas por NF-e',
+  return {CNPJ_RESTAURANTE:'CNPJ do restaurante',NOME_RESTAURANTE:'Nome do restaurante',
+    MAX_TENTATIVAS_NFE:'Máx. tentativas por NF-e',
     INTERVALO_TENTATIVAS_MS:'Intervalo entre tentativas (ms)',LIMITE_CONSULTAS_SEGUNDO:'Consultas por segundo'}[k]||k;
 }
 async function loadConfig(){
-  loadIaStatus();
   try{
     catCache = (await api('/api/admin?recurso=categorias')).rows;
     renderCatList();
@@ -844,26 +1059,6 @@ async function loadConfig(){
         <button class="btn-2 btn-sm" style="padding:0 16px" onclick="salvarRegra('${r.chave}')">Salvar</button>
       </div>`).join('');
   }catch(e){ document.getElementById('config-regras').innerHTML=`<div class="empty">${e.message}</div>`; }
-}
-async function loadIaStatus(){
-  const box = document.getElementById('ia-status-card');
-  try{
-    const d = await api('/api/teste');
-    const ia = d.checagens?.ia_gemini;
-    const ativa = ia?.ok && ia?.motivo?.includes('definida');
-    if(ativa){
-      box.innerHTML=`<div style="color:var(--accent);font-weight:600">✓ IA ativa</div>
-        <div class="muted small" style="margin-top:4px">Sugestões automáticas de produtos com Gemini habilitadas.</div>`;
-    } else {
-      box.innerHTML=`<div style="color:var(--warn);font-weight:600">⚠ IA não configurada</div>
-        <div class="muted small" style="margin-top:6px;line-height:1.6">
-          Para ativar as sugestões automáticas de produtos:<br>
-          1. Acesse <strong>aistudio.google.com/apikey</strong> e gere uma chave gratuita.<br>
-          2. No painel do Vercel → Settings → Environment Variables → adicione <strong>GEMINI_API_KEY</strong>.<br>
-          3. Faça um novo deploy (Deployments → ⋯ → Redeploy).
-        </div>`;
-    }
-  }catch(e){ box.innerHTML=`<div class="muted small">${e.message}</div>`; }
 }
 function renderCatList(){
   const el = document.getElementById('cat-list');
@@ -907,6 +1102,114 @@ async function salvarRegra(chave){
     await api('/api/admin?recurso=config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave,valor:v})});
     toast('Salvo ✓','ok');
   }catch(e){ toast(e.message,'err'); }
+}
+
+/* TREINAMENTO COM CHATGPT */
+async function baixarJson(nomeArquivo, obj){
+  const txt = JSON.stringify(obj, null, 2);
+  // tenta copiar para a área de transferência (útil no celular)
+  try{ await navigator.clipboard.writeText(txt); }catch(_){}
+  try{
+    const blob = new Blob([txt], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download=nomeArquivo;
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }catch(_){}
+}
+async function exportarContexto(){
+  const box=document.getElementById('treino-export');
+  box.textContent='Gerando contexto…';
+  try{
+    const d = await api('/api/admin?recurso=treino-contexto');
+    await baixarJson('superajudante-contexto.json', d);
+    box.innerHTML = `✓ Contexto gerado e copiado. ${d.produtos_internos.length} produtos, ${d.produtos_pendentes.length} pendentes.`;
+  }catch(e){ box.textContent=e.message; }
+}
+async function exportarDesconhecidos(){
+  const box=document.getElementById('treino-export');
+  box.textContent='Buscando produtos desconhecidos…';
+  try{
+    const d = await api('/api/admin?recurso=treino-desconhecidos');
+    if(!d.itens.length){ box.innerHTML='✓ Nenhum produto desconhecido. Tudo já está confirmado.'; return; }
+    await baixarJson('superajudante-desconhecidos.json', d);
+    box.innerHTML = `✓ ${d.resumo.produtos_desconhecidos} produtos desconhecidos (de ${d.resumo.produtos_unicos} únicos) gerados e copiados.`;
+  }catch(e){ box.textContent=e.message; }
+}
+function copiarComandoGPT(){
+  const comando = `Você é um assistente de cadastro de produtos de restaurante.
+Vou te enviar dois JSON do meu sistema "Super Ajudante":
+1) o CONTEXTO (produtos, categorias, fornecedores, embalagens já existentes);
+2) os PRODUTOS DESCONHECIDOS vindos das notas fiscais.
+
+Sua tarefa: para cada produto desconhecido, devolver um catálogo revisado.
+Responda APENAS um JSON válido no formato:
+{
+  "schema_version": "1.0",
+  "tipo": "catalogo_revisado_gpt",
+  "origem": "chatgpt",
+  "produtos_confirmados": [
+    { "nome_interno": "Coca-Cola 2L", "categoria": "Bebidas", "unidade_estoque": "UN",
+      "cnpj_fornecedor": "00000000000000", "codigo_produto_nf": "123" }
+  ],
+  "embalagens_confirmadas": [
+    { "nome_interno": "Coca-Cola 2L", "descricao": "Caixa 6 UN", "sigla": "CX6", "fator": 6, "unidade_base": "UN" }
+  ],
+  "mapeamentos_confirmados": [
+    { "nome_interno": "Coca-Cola 2L", "cnpj_fornecedor": "00000000000000", "codigo_produto_nf": "123" }
+  ],
+  "aliases_confirmados": [
+    { "nome_interno": "Coca-Cola 2L", "alias": "COCA COLA PET 2L" }
+  ],
+  "itens_com_duvida": []
+}
+Regras: nome_interno limpo e curto em português; categoria das existentes quando fizer sentido;
+unidade_estoque é como controlo o estoque (UN, KG, L...); fator da embalagem = quantas unidades vêm dentro.`;
+  navigator.clipboard.writeText(comando)
+    .then(()=>toast('Comando copiado ✓','ok'))
+    .catch(()=>toast('Não consegui copiar. Selecione manualmente.','err'));
+}
+function lerTreinoJson(){
+  const txt=document.getElementById('treino-json').value.trim();
+  if(!txt) { toast('Cole o JSON revisado pelo ChatGPT.','err'); return null; }
+  return txt;
+}
+async function validarTreino(){
+  const txt=lerTreinoJson(); if(txt===null) return;
+  const box=document.getElementById('treino-result');
+  try{
+    const r = await api('/api/admin?recurso=treino-validar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({json:txt})});
+    if(r.ok){
+      box.innerHTML = `<div class="prev">✓ JSON válido. ${r.resumo.produtos} produtos, ${r.resumo.embalagens} embalagens, ${r.resumo.mapeamentos} mapeamentos, ${r.resumo.aliases} aliases.</div>`;
+    } else {
+      box.innerHTML = `<div class="alertbar">O arquivo tem informações faltando. Corrija antes de importar:<br>• ${r.erros.join('<br>• ')}</div>`;
+    }
+  }catch(e){ box.innerHTML=`<div class="alertbar">${e.message}</div>`; }
+}
+async function importarTreino(substituir){
+  const txt=lerTreinoJson(); if(txt===null) return;
+  const box=document.getElementById('treino-result');
+  box.innerHTML='<div class="muted small">Importando…</div>';
+  try{
+    const r = await api('/api/admin?recurso=treino-importar',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({json:txt, substituir:!!substituir})});
+    const rel=r.relatorio;
+    let html=`<div class="prev">✓ Importação concluída.<br>
+      Produtos: <b>${rel.produtos_criados}</b> criados, <b>${rel.produtos_atualizados}</b> atualizados.<br>
+      Embalagens: <b>${rel.embalagens_criadas}</b> · Mapeamentos: <b>${rel.mapeamentos_criados}</b> · Aliases: <b>${rel.aliases_criados}</b></div>`;
+    if(rel.conflitos && rel.conflitos.length){
+      html += `<div class="alertbar" style="margin-top:10px">⚠ ${rel.conflitos.length} produto(s) já possuem cadastro confirmado e não foram sobrescritos:<br>• `
+        + rel.conflitos.map(c=>esc(c.nome_interno||c.id_produto)).join('<br>• ')
+        + `<div class="row" style="margin-top:10px">
+            <button class="btn-2 btn-sm" style="width:100%;padding:10px" onclick="document.getElementById('treino-result').querySelector('.alertbar').remove()">Manter atuais</button>
+            <button class="btn-2 btn-sm" style="width:100%;padding:10px;background:var(--danger);color:#fff" onclick="importarTreino(true)">Substituir</button>
+          </div></div>`;
+    }
+    box.innerHTML=html;
+    estoqueCache=[]; embCache={}; catCache=null;
+  }catch(e){
+    const erros = e.data?.erros;
+    box.innerHTML = `<div class="alertbar">${e.message}${erros?'<br>• '+erros.join('<br>• '):''}</div>`;
+  }
 }
 
 loadDash();

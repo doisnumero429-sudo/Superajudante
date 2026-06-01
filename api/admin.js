@@ -349,7 +349,7 @@ async function entrada(req, res) {
 // NÃO altera: estoque_atual, custo_medio, ultimo_custo_unitario (apenas por entradas/saídas).
 const CAMPOS_EDITAVEIS = [
   'nome_interno', 'categoria_id', 'unidade_estoque',
-  'codigo_barras_unitario', 'preco_venda', 'estoque_minimo', 'observacoes', 'produto_teste',
+  'codigo_barras_unitario', 'preco_venda', 'estoque_minimo', 'observacoes',
 ];
 
 async function produtoEditar(req, res) {

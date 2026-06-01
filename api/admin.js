@@ -5,6 +5,7 @@
 //   recurso=config              GET lista | POST { chave, valor }
 //   recurso=embalagens          GET ?id_produto= | POST { acao: criar|editar|remover }
 //   recurso=entrada             POST -> entrada manual de produto (com/sem cadastro)
+//   recurso=produto-editar      POST { id_produto, ...campos } -> edita campos do produto (sem estoque)
 //   recurso=treino-contexto     GET  -> JSON com todo o contexto para o ChatGPT
 //   recurso=treino-desconhecidos GET -> JSON com produtos pendentes agrupados
 //   recurso=treino-validar      POST { json } -> valida o catalogo revisado
@@ -33,6 +34,7 @@ export default async function handler(req, res) {
     if (recurso === 'config') return await config(req, res);
     if (recurso === 'embalagens') return await embalagens(req, res);
     if (recurso === 'entrada') return await entrada(req, res);
+    if (recurso === 'produto-editar') return await produtoEditar(req, res);
     if (recurso === 'treino-contexto') return await treinoContexto(req, res);
     if (recurso === 'treino-desconhecidos') return await treinoDesconhecidos(req, res);
     if (recurso === 'treino-validar') return await treinoValidar(req, res);
@@ -285,6 +287,37 @@ async function entrada(req, res) {
     custo_medio: r.custo_medio,
     estoque_atual: r.estoque_atual,
   });
+}
+
+// ---------- PRODUTO EDITAR ----------
+// Campos editáveis: nome, categoria, unidade, ean unitário, preço venda, estoque mínimo, obs.
+// NÃO altera: estoque_atual, custo_medio, ultimo_custo_unitario (apenas por entradas/saídas).
+const CAMPOS_EDITAVEIS = [
+  'nome_interno', 'categoria_id', 'unidade_estoque',
+  'codigo_barras_unitario', 'preco_venda', 'estoque_minimo', 'observacoes',
+];
+
+async function produtoEditar(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { erro: 'Metodo nao permitido' });
+  const b = await readBody(req);
+  if (!b.id_produto) return json(res, 400, { erro: 'Informe o id_produto.' });
+
+  const produtos = await readRows('Produtos');
+  const prod = produtos.find((p) => p.id_produto === b.id_produto);
+  if (!prod) return json(res, 404, { erro: 'Produto nao encontrado.' });
+
+  const patch = { ...prod, atualizado_em: nowStr() };
+  for (const k of CAMPOS_EDITAVEIS) {
+    if (b[k] !== undefined) patch[k] = b[k];
+  }
+
+  // Marca confirmado se os três campos obrigatórios estiverem preenchidos
+  if (patch.nome_interno && patch.categoria_id && patch.unidade_estoque) {
+    patch.confirmado = 'SIM';
+  }
+
+  await updateRow('Produtos', prod.id_produto, patch);
+  return json(res, 200, { ok: true, id_produto: prod.id_produto, confirmado: patch.confirmado });
 }
 
 // ---------- TREINAMENTO: CONTEXTO ----------

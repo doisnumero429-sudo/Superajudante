@@ -22,6 +22,18 @@ function arr(x) {
   return Array.isArray(x) ? x : [x];
 }
 
+// Classifica a unidade de compra (uCom) em PESO, VOLUME ou UNIDADE.
+// Para PESO/VOLUME, a quantidade da nota ja esta na propria unidade, entao
+// o fator de conversao deve ser 1 (entra direto no estoque na mesma unidade).
+export function classificarUnidade(uCom) {
+  const u = String(uCom || '').trim().toUpperCase().replace(/\./g, '');
+  const peso = ['KG', 'KILO', 'KILOGRAMA', 'KGS', 'QUILO', 'G', 'GR', 'GRAMA', 'GRAMAS'];
+  const volume = ['L', 'LT', 'LTR', 'LITRO', 'LITROS', 'ML', 'MILILITRO'];
+  if (peso.includes(u)) return { tipo: 'PESO', base: (u.startsWith('G') && u !== 'GRS') ? 'G' : 'KG' };
+  if (volume.includes(u)) return { tipo: 'VOLUME', base: u.startsWith('ML') ? 'ML' : 'L' };
+  return { tipo: 'UNIDADE', base: 'UN' };
+}
+
 // Detecta o fator de conversao (ex.: 24UN, 6X, 12 UN) na descricao.
 export function detectarFator(descricao) {
   if (!descricao) return 1;
@@ -112,7 +124,12 @@ export function parseNfe(xmlString) {
   const itens = arr(inf.det).map((det, i) => {
     const prod = det.prod || {};
     const descricao = prod.xProd || '';
-    const fator = detectarFator(descricao);
+    const uCom = prod.uCom || '';
+    const classe = classificarUnidade(uCom);
+    const ehPeso = classe.tipo !== 'UNIDADE';
+    // Peso/volume: a qtd da nota ja esta na unidade final -> fator 1.
+    // Unidade/embalagem: tenta detectar o fator pela descricao (ex.: CX 24UN).
+    const fator = ehPeso ? 1 : detectarFator(descricao);
     const qtdNf = num(prod.qCom);
     const vTotal = num(prod.vProd);
     const qtdEstoque = qtdNf * fator;
@@ -124,7 +141,7 @@ export function parseNfe(xmlString) {
       descricao_original: descricao,
       ncm: prod.NCM || '',
       cfop: prod.CFOP || '',
-      unidade_nf: prod.uCom || '',
+      unidade_nf: uCom,
       quantidade_nf: qtdNf,
       valor_unitario_nf: num(prod.vUnCom),
       valor_total_nf: vTotal,
@@ -132,6 +149,10 @@ export function parseNfe(xmlString) {
       quantidade_tributavel: num(prod.qTrib),
       valor_unitario_tributavel: num(prod.vUnTrib),
       indtot: prod.indTot || '',
+      // dicas de unidade para a tela de conferencia
+      unidade_tipo: classe.tipo,            // PESO | VOLUME | UNIDADE
+      eh_peso: ehPeso,
+      unidade_estoque_sugerida: ehPeso ? classe.base : 'UN',
       fator_conversao: fator,
       quantidade_estoque: qtdEstoque,
       custo_unitario_estoque: Number(custoEstoque.toFixed(6)),

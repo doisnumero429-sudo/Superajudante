@@ -13,6 +13,7 @@
 //   recurso=treino-fila-add       POST { chave, nota, fornecedor, itens } -> adiciona NF-e à esteira
 //   recurso=treino-fila-listar    GET  -> lista fila com stats e desconhecidos agrupados
 //   recurso=treino-fila-limpar    POST -> limpa Treino_Fila e Treino_Itens (sem tocar estoque)
+//   recurso=treino-resetar-tudo   POST -> apaga esteira + mapeamentos + aliases + embalagens + produtos sem estoque/histórico
 //   recurso=treino-fila-pacote    GET  -> retorna contexto + desconhecidos da esteira para ChatGPT
 //   recurso=produto-verificar-historico GET ?id_produto -> verifica se produto tem historico
 //   recurso=produto-excluir       POST { id_produto } -> exclui definitivamente ou inativa
@@ -51,6 +52,7 @@ export default async function handler(req, res) {
     if (recurso === 'treino-fila-add') return await treinoFilaAdd(req, res);
     if (recurso === 'treino-fila-listar') return await treinoFilaListar(req, res);
     if (recurso === 'treino-fila-limpar') return await treinoFilaLimpar(req, res);
+    if (recurso === 'treino-resetar-tudo') return await treinoResetarTudo(req, res);
     if (recurso === 'treino-fila-pacote') return await treinoFilaPacote(req, res);
     if (recurso === 'produto-verificar-historico') return await produtoVerificarHistorico(req, res);
     if (recurso === 'produto-excluir') return await produtoExcluir(req, res);
@@ -895,6 +897,43 @@ async function treinoFilaLimpar(req, res) {
   try { await deleteAllRows('Treino_Itens'); } catch { /* ok se vazia */ }
   try { await deleteAllRows('Treino_Fila'); } catch { /* ok se vazia */ }
   return json(res, 200, { ok: true });
+}
+
+// ---------- ESTEIRA: RESETAR TUDO (para testes) ----------
+async function treinoResetarTudo(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { erro: 'POST only' });
+
+  // 1. Limpa esteira
+  try { await deleteAllRows('Treino_Itens'); } catch { /* ok se vazia */ }
+  try { await deleteAllRows('Treino_Fila'); } catch { /* ok se vazia */ }
+
+  // 2. Limpa tabelas de aprendizado
+  try { await deleteAllRows('Produto_Fornecedor'); } catch { /* ok */ }
+  try { await deleteAllRows('Aliases_Produto'); } catch { /* ok */ }
+  try { await deleteAllRows('Embalagens'); } catch { /* ok */ }
+
+  // 3. Remove produtos sem estoque e sem histórico
+  let produtosDeletados = 0;
+  try {
+    const produtos = await readRows('Produtos');
+    let movs = [], itens = [];
+    try { movs = await readRows('Movimentacoes_Estoque'); } catch { /* ok */ }
+    try { itens = await readRows('Itens_Nota'); } catch { /* ok */ }
+
+    const comMovs = new Set(movs.map((m) => m.id_produto));
+    const comItens = new Set(itens.map((i) => i.id_produto));
+
+    for (const p of produtos) {
+      const semEstoque = (parseFloat(p.estoque_atual) || 0) === 0;
+      const semHistorico = !comMovs.has(p.id_produto) && !comItens.has(p.id_produto);
+      if (semEstoque && semHistorico) {
+        await deleteRow('Produtos', p.id_produto);
+        produtosDeletados += 1;
+      }
+    }
+  } catch { /* ok */ }
+
+  return json(res, 200, { ok: true, produtos_deletados: produtosDeletados });
 }
 
 // ---------- ESTEIRA: PACOTE COMPLETO PARA CHATGPT ----------

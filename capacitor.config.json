@@ -3,7 +3,8 @@
   "appName": "Super Ajudante",
   "webDir": "public",
   "server": {
-    "androidScheme": "https"
+    "url": "https://superajudante.vercel.app",
+    "cleartext": false
   },
   "plugins": {
     "BarcodeScanner": {

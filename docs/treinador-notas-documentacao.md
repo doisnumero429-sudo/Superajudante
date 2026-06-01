@@ -545,75 +545,75 @@ Retorna apenas produtos ainda não confirmados:
 
 ## 8. Formato Completo do JSON de Catálogo (para ChatGPT)
 
-Este é o formato exato que o ChatGPT deve produzir ao revisar um JSON de desconhecidos:
+Este é o **formato exato e obrigatório** que o ChatGPT deve produzir. O sistema valida
+`schema_version`, `tipo` e a presença dos quatro arrays antes de aceitar a importação.
 
 ```json
 {
+  "schema_version": "1.0",
+  "tipo": "catalogo_revisado_gpt",
   "origem": "chatgpt",
-  "resumo": "Revisão de NF-e nº 003, Distribuidora X, 2024-03-15",
-  "catalogo": [
+  "produtos_confirmados": [
     {
-      "id_produto": null,
-      "nome_interno": "Nome como aparece no restaurante",
-      "categoria": "Nome da categoria (deve existir ou será criada)",
-      "unidade_estoque": "KG | L | UN | G | ML | CX | SC | PCT",
-      "embalagens": [
-        {
-          "sigla": "KG",
-          "descricao": "Quilograma",
-          "fator": 1,
-          "unidade_base": "KG",
-          "permite_entrada": "SIM",
-          "permite_saida": "SIM",
-          "permite_inventario": "SIM",
-          "padrao_entrada": "NAO",
-          "padrao_saida": "SIM",
-          "padrao_inventario": "SIM"
-        },
-        {
-          "sigla": "CX10KG",
-          "descricao": "Caixa de 10 kg",
-          "fator": 10,
-          "unidade_base": "KG",
-          "permite_entrada": "SIM",
-          "permite_saida": "NAO",
-          "permite_inventario": "NAO",
-          "padrao_entrada": "SIM",
-          "padrao_saida": "NAO",
-          "padrao_inventario": "NAO"
-        }
-      ],
-      "mapeamentos": [
-        {
-          "cnpj_fornecedor": "12345678000195",
-          "nome_fornecedor": "Distribuidora X",
-          "codigo_produto_nf": "045",
-          "ean": "7891234567890",
-          "descricao_original": "QUEIJO MUSSARELA FATIADO KG",
-          "unidade_nf": "KG"
-        }
-      ],
-      "aliases": [
-        "MUCАРELA",
-        "QUEIJO MUSSARELA",
-        "MUSSARELA FATIADA"
-      ]
+      "nome_interno": "Queijo Muçarela",
+      "categoria": "Laticínios",
+      "unidade_estoque": "KG",
+      "cnpj_fornecedor": "12345678000195",
+      "codigo_produto_nf": "045",
+      "ean": "",
+      "descricao_original_nfe": "QUEIJO MUSSARELA FATIADO KG",
+      "unidade_nfe": "KG"
     }
-  ]
+  ],
+  "embalagens_confirmadas": [
+    {
+      "nome_interno": "Queijo Muçarela",
+      "descricao": "Quilograma",
+      "sigla": "KG",
+      "fator": 1,
+      "unidade_base": "KG"
+    },
+    {
+      "nome_interno": "Queijo Muçarela",
+      "descricao": "Barra de 5 kg",
+      "sigla": "BARRA5KG",
+      "fator": 5,
+      "unidade_base": "KG"
+    }
+  ],
+  "mapeamentos_confirmados": [
+    {
+      "nome_interno": "Queijo Muçarela",
+      "cnpj_fornecedor": "12345678000195",
+      "codigo_produto_nf": "045",
+      "ean": "",
+      "descricao_original": "QUEIJO MUSSARELA FATIADO KG",
+      "unidade_nf": "KG",
+      "nome_fornecedor": "Laticínios X"
+    }
+  ],
+  "aliases_confirmados": [
+    { "nome_interno": "Queijo Muçarela", "alias": "MUCАРELA" },
+    { "nome_interno": "Queijo Muçarela", "alias": "QUEIJO MUSSARELA" },
+    { "nome_interno": "Queijo Muçarela", "alias": "MUSSARELA FATIADA" }
+  ],
+  "itens_com_duvida": []
 }
 ```
 
+**Como o sistema vincula os arrays:**
+O campo `nome_interno` é a chave de ligação entre os quatro arrays. O sistema busca o produto pelo `nome_interno` e associa as embalagens, mapeamentos e aliases que tenham o mesmo valor.
+
 **Regras críticas para o ChatGPT ao preencher:**
 
-1. `id_produto: null` para produtos novos. Se o produto já existir no catálogo enviado, use o `id_produto` real.
-2. `nome_interno`: nome como o restaurante usa internamente (não a descrição da NF-e).
-3. `unidade_estoque`: sempre a menor unidade de controle (KG para carnes, L para líquidos, UN para itens unitários).
-4. `embalagens`: inclua SEMPRE pelo menos 1 embalagem com `fator: 1` para a unidade base. Inclua embalagens de compra (como CX, SC, BARRA) com o fator correto.
+1. `schema_version` deve ser `"1.0"` e `tipo` deve ser `"catalogo_revisado_gpt"` — obrigatórios para passar na validação.
+2. `nome_interno`: nome curto, como o restaurante usa (não a descrição bruta da NF-e).
+3. `unidade_estoque`: sempre a menor unidade de controle (KG para carnes, L para líquidos, UN para itens unitários). Nunca "CX", "SC", "PCT" — essas são embalagens.
+4. `embalagens_confirmadas`: inclua sempre pelo menos 1 com `fator: 1` (unidade base pura). Inclua embalagens de compra com o fator correto.
 5. `fator`: quantas unidades base cabem em 1 unidade dessa embalagem.
-6. `padrao_entrada: "SIM"` para a embalagem usada nas compras (NF-e). Apenas uma por produto.
-7. `padrao_saida: "SIM"` para a embalagem de baixa de estoque. Apenas uma por produto.
-8. `mapeamentos.cnpj_fornecedor`: apenas dígitos, sem formatação.
-9. `aliases`: variações do nome para reconhecimento futuro. Inclua o nome em maiúsculas e variações comuns.
+6. `mapeamentos_confirmados.cnpj_fornecedor`: apenas dígitos, sem pontos, barras ou traços.
+7. `aliases_confirmados`: variações do nome em maiúsculas e sem acentos.
+8. `itens_com_duvida`: pode ser vazio `[]`; use para listar produtos que o ChatGPT não conseguiu identificar com segurança.
 
 ---
 
@@ -794,16 +794,28 @@ REGRAS OBRIGATÓRIAS:
 9. Se um produto já existir no catálogo enviado, use o id_produto existente e não crie duplicata.
 10. Categorias comuns: Laticínios, Carnes, Hortifrutigranjeiros, Bebidas, Grãos e Farinhas, Óleos e Condimentos, Limpeza, Embalagens, Outros.
 
-FORMATO DE SAÍDA:
-Responda APENAS com o JSON válido, sem markdown, sem explicações fora do JSON.
-Use exatamente o schema do catálogo fornecido no contexto.
+FORMATO DE SAÍDA OBRIGATÓRIO:
+Responda APENAS com JSON válido. Nunca use markdown, bloco de código ou texto fora do JSON.
+O JSON deve ter EXATAMENTE esta estrutura (sem variações):
+{
+  "schema_version": "1.0",
+  "tipo": "catalogo_revisado_gpt",
+  "origem": "chatgpt",
+  "produtos_confirmados": [...],
+  "embalagens_confirmadas": [...],
+  "mapeamentos_confirmados": [...],
+  "aliases_confirmados": [...],
+  "itens_com_duvida": []
+}
+Vincule embalagens, mapeamentos e aliases ao produto pelo campo "nome_interno" (deve ser idêntico).
 
 ERROS COMUNS A EVITAR:
 - Não use unidade_estoque "CX", "SC", "PCT" — são embalagens, não unidades base.
-- Não crie produtos duplicados se o nome já existir no catálogo (mesmo nome diferente).
-- Não invente códigos de produto — use os da NF-e exatamente como fornecidos.
-- Não omita o array "embalagens" — deve ter pelo menos 1 item.
-- Não omita o array "mapeamentos" — deve ter pelo menos 1 item com os dados da NF-e.
+- Não crie produtos duplicados se o nome já existir no catálogo enviado.
+- Não invente códigos de produto — use os valores da NF-e exatamente como fornecidos.
+- Não omita "embalagens_confirmadas" — deve ter pelo menos 1 item por produto.
+- Não omita "mapeamentos_confirmados" — deve ter pelo menos 1 item por produto.
+- Não altere "schema_version" nem "tipo" — o sistema rejeita qualquer outro valor.
 ```
 
 **Arquivo de conhecimento (Knowledge File):** `contexto_superajudante.json` (exportado pelo sistema, atualizado a cada sessão de treinamento)
@@ -819,7 +831,9 @@ Contexto do sistema já enviado anteriormente.
 
 [COLAR JSON desconhecidos_superajudante.json]
 
-Produza o JSON de catálogo para importação.
+Produza o JSON de catálogo para importação no formato obrigatório:
+schema_version "1.0", tipo "catalogo_revisado_gpt",
+arrays: produtos_confirmados, embalagens_confirmadas, mapeamentos_confirmados, aliases_confirmados.
 ```
 
 ### Comando para produto único:

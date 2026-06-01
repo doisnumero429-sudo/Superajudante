@@ -20,6 +20,20 @@ export default async function handler(req, res) {
     faltando,
   };
 
+  // 1b) Detecta se a SUPABASE_SERVICE_KEY e na verdade a chave "anon" (causa de
+  // erros de RLS ao gravar). Decodifica o payload do JWT e le o campo "role".
+  try {
+    const k = process.env.SUPABASE_SERVICE_KEY || '';
+    const partes = k.split('.');
+    if (partes.length === 3) {
+      const payload = JSON.parse(Buffer.from(partes[1], 'base64').toString('utf8'));
+      const role = payload.role || '';
+      resultado.checagens.supabase_key = role === 'service_role'
+        ? { ok: true, motivo: 'Chave service_role correta (ignora RLS).' }
+        : { ok: false, motivo: `A chave configurada tem role "${role}". Use a service_role (Settings > API) para evitar erros de RLS ao gravar.` };
+    }
+  } catch { /* chave nao e JWT decodificavel; ignora */ }
+
   // 2) Supabase: le cada tabela e verifica acesso
   try {
     const tabelas = Object.keys(TABLES);
@@ -42,6 +56,11 @@ export default async function handler(req, res) {
   } catch (e) {
     resultado.checagens.supabase = { ok: false, erro: e.message };
   }
+
+  // 2b) IA (Gemini) — opcional. So informa se esta configurada.
+  resultado.checagens.ia_gemini = process.env.GEMINI_API_KEY
+    ? { ok: true, motivo: 'GEMINI_API_KEY definida. Sugestao de produtos com IA ativa.' }
+    : { ok: true, motivo: 'IA desativada (sem GEMINI_API_KEY). Opcional.' };
 
   // 3) Meu Danfe: valida a Api-Key sem gastar credito.
   try {

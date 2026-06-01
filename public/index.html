@@ -66,6 +66,13 @@ button:active{transform:scale(.97)}
 .item .meta{color:var(--muted);font-size:12px;margin-top:4px}
 .item .calc{display:flex;gap:16px;margin-top:10px;flex-wrap:wrap;font-size:12.5px}
 .item .calc b{font-family:'Fraunces',serif;font-size:15px;color:var(--ink);display:block}
+.conv{margin-top:12px;border-top:1px dashed var(--line);padding-top:12px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{background:var(--surface);border:1px solid var(--line);color:var(--muted);padding:7px 12px;font-size:12.5px;font-weight:500;border-radius:20px}
+.chip.on{background:var(--accent);color:#06120c;border-color:var(--accent)}
+.chip-input{width:64px!important;padding:7px 10px!important;font-size:13px!important;text-align:center;border-radius:20px!important}
+.prev{margin-top:12px;background:#12241b;border:1px solid var(--accent-d);border-radius:10px;padding:10px 12px;font-size:13px}
+.prev b{font-family:'Fraunces',serif}
 .row{display:flex;gap:10px}.row>*{flex:1}
 .list-row{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)}
 .list-row:last-child{border-bottom:none}
@@ -105,10 +112,10 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
   <div class="grid" id="dash-stats"><div class="empty">Carregando…</div></div>
   <div class="sec-title">Estoque baixo</div>
   <div class="card" id="dash-baixo"><div class="muted small">—</div></div>
+  <div class="sec-title">Mais consumidos (30 dias)</div>
+  <div class="card" id="dash-consumo"><div class="muted small">—</div></div>
   <div class="sec-title">Últimas movimentações</div>
   <div class="card" id="dash-movs"><div class="muted small">—</div></div>
-  <button class="btn-2" style="width:100%;padding:12px;margin-top:6px" onclick="rodarDiagnostico()">⚙ Testar configuração</button>
-  <div id="diag-result"></div>
 </section>
 
 <!-- IMPORTAR -->
@@ -186,6 +193,27 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
   <div id="contas-list"><div class="empty">Carregando…</div></div>
 </section>
 
+<!-- CONFIGURAÇÕES -->
+<section class="view" id="v-config">
+  <div class="sec-title">Categorias</div>
+  <div class="card">
+    <div class="row">
+      <input id="nova-cat" placeholder="Nova categoria…">
+      <button class="btn-2 btn-sm" style="padding:0 16px" onclick="criarCategoria()">Adicionar</button>
+    </div>
+    <div id="cat-list" style="margin-top:6px"><div class="muted small">Carregando…</div></div>
+  </div>
+
+  <div class="sec-title">Regras</div>
+  <div class="card" id="config-regras"><div class="muted small">Carregando…</div></div>
+
+  <div class="sec-title">Diagnóstico</div>
+  <div class="card">
+    <button class="btn-2" style="width:100%;padding:12px" onclick="rodarDiagnostico()">⚙ Testar configuração</button>
+    <div id="diag-result"></div>
+  </div>
+</section>
+
 </main>
 
 <nav>
@@ -197,6 +225,8 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>Estoque</button>
   <button data-v="contas" onclick="nav('contas')">
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>Contas</button>
+  <button data-v="config" onclick="nav('config')">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Config</button>
 </nav>
 </div>
 <div class="toast" id="toast"></div>
@@ -218,7 +248,8 @@ async function api(path, opts){
 }
 const brl = n => 'R$ ' + (Number(n)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 const TITLES = {dash:['Painel','Visão geral'],import:['Importar NF-e','Buscar nota'],conf:['Conferência','Revisar antes de lançar'],
-  estoque:['Estoque','Produtos'],saida:['Saída','Baixa manual'],inv:['Inventário','Contagem'],contas:['Contas a pagar','Financeiro']};
+  estoque:['Estoque','Produtos'],saida:['Saída','Baixa manual'],inv:['Inventário','Contagem'],contas:['Contas a pagar','Financeiro'],
+  config:['Configurações','Ajustes e categorias']};
 
 function nav(v){
   _stopActiveScan();
@@ -230,6 +261,7 @@ function nav(v){
   if(v==='estoque') loadEstoque();
   if(v==='contas') loadContas();
   if(v==='saida') loadProdSelect();
+  if(v==='config') loadConfig();
   window.scrollTo(0,0);
 }
 
@@ -249,8 +281,14 @@ async function loadDash(){
     document.getElementById('dash-baixo').innerHTML = d.lista_estoque_baixo.length
       ? d.lista_estoque_baixo.map(p=>`<div class="list-row"><div><div class="t">${p.nome||'—'}</div></div><div class="v" style="color:var(--danger)">${p.estoque} <span class="muted small">/ ${p.minimo}</span></div></div>`).join('')
       : '<div class="muted small">Tudo em ordem.</div>';
+    document.getElementById('dash-consumo').innerHTML = (d.consumo_30d&&d.consumo_30d.length)
+      ? d.consumo_30d.map(p=>`<div class="list-row"><div><div class="t">${p.nome||'—'}</div></div><div class="v">${p.quantidade}</div></div>`).join('')
+      : '<div class="muted small">Sem saídas nos últimos 30 dias.</div>';
     document.getElementById('dash-movs').innerHTML = d.ultimas_movimentacoes.length
-      ? d.ultimas_movimentacoes.map(m=>`<div class="list-row"><div><div class="t">${m.tipo} · ${m.motivo||''}</div><div class="s">${m.data||''}</div></div><div class="v ${m.tipo==='SAIDA'?'':''}">${m.quantidade}</div></div>`).join('')
+      ? d.ultimas_movimentacoes.map(m=>{
+          const ent=m.tipo==='ENTRADA'; const cor=ent?'var(--accent)':(m.tipo==='SAIDA'?'var(--danger)':'var(--muted)');
+          return `<div class="list-row"><div><div class="t">${m.tipo} · ${m.motivo||''}</div><div class="s">${m.data||''}</div></div><div class="v" style="color:${cor}">${ent?'+':(m.tipo==='SAIDA'?'−':'')}${m.quantidade}</div></div>`;
+        }).join('')
       : '<div class="muted small">Sem movimentações ainda.</div>';
   }catch(e){ document.getElementById('dash-stats').innerHTML = `<div class="empty">${e.message}</div>`; }
 }
@@ -314,6 +352,29 @@ async function abrirConferencia(chave){
   renderConferencia();
   nav('conf');
 }
+const arred = n => { const x=Number(n)||0; return Number.isInteger(x)?String(x):x.toFixed(3).replace(/\.?0+$/,''); };
+const esc = s => String(s==null?'':s).replace(/"/g,'&quot;');
+const UNI_PESO=['KG','G','L','ML'], UNI_UN=['UN','CX','PCT','FD','DZ'];
+
+function initItemConf(it){
+  if(it._init) return;
+  it._init = true;
+  it._modo = it.eh_peso ? 'peso' : 'unidade';
+  it.unidade_estoque = (it.unidade_estoque || it.unidade_estoque_sugerida || (it.eh_peso?'KG':'UN')).toUpperCase();
+  it.fator_conversao = it._modo==='peso' ? 1 : (parseFloat(it.fator_conversao)||1);
+  if(it.produto_novo && it.nome_interno==null) it.nome_interno='';
+  recalcItem(it);
+}
+function recalcItem(it){
+  const fator = it._modo==='peso' ? 1 : (parseFloat(it.fator_conversao)||1);
+  it.fator_conversao = fator;
+  it.quantidade_estoque = (parseFloat(it.quantidade_nf)||0) * fator;
+  it.custo_unitario_estoque = it.quantidade_estoque>0 ? (parseFloat(it.valor_total_nf)||0)/it.quantidade_estoque : 0;
+}
+function previewTexto(it){
+  return `<b>${arred(it.quantidade_estoque)} ${it.unidade_estoque}</b> entram no estoque · custo <b>${brl(it.custo_unitario_estoque)}</b>/${it.unidade_estoque}`;
+}
+
 function renderConferencia(){
   const r = confData;
   const c = document.getElementById('conf-content');
@@ -325,30 +386,45 @@ function renderConferencia(){
     <hr><div class="row"><div><div class="muted small">Emissão</div><b>${r.nota.data_emissao||'—'}</b></div>
     <div><div class="muted small">Total</div><b style="font-family:Fraunces">${brl(r.nota.valor_total_nota)}</b></div></div>
   </div>`;
+
+  const temNovos = r.itens.some(it=>it.produto_novo);
   html += `<div class="sec-title">Produtos (${r.itens.length})</div>`;
+  if(temNovos) html += `<button class="btn-2" style="width:100%;padding:12px;margin-bottom:10px" onclick="sugerirComIA()">✨ Preencher novos com IA</button>`;
+
   r.itens.forEach((it,i)=>{
-    const novo = it.produto_novo;
+    initItemConf(it);
+    const novo = it.produto_novo, peso = it._modo==='peso', u = it.unidade_estoque;
+    const lista = peso ? UNI_PESO : UNI_UN;
+    const uChips = lista.map(x=>`<button class="chip ${u===x?'on':''}" onclick="setUnidade(${i},'${x}')">${x}</button>`).join('')
+      + `<input class="chip-input" value="${esc(u)}" onchange="setUnidade(${i},this.value)">`;
     html += `<div class="item">
       <div class="top"><div class="desc">${it.descricao_original}</div>
         ${novo?'<span class="badge b-new">NOVO</span>':'<span class="badge b-ok">cadastrado</span>'}</div>
-      <div class="meta">Cód ${it.codigo_produto_nf}${it.codigo_barras?' · EAN '+it.codigo_barras:''} · ${it.quantidade_nf} ${it.unidade_nf}</div>
-      <div class="calc">
-        <div><span class="muted">Fator</span><b><input type="number" value="${it.fator_conversao}" style="padding:6px;width:70px;font-size:14px" onchange="ajustarFator(${i},this.value)"></b></div>
-        <div><span class="muted">Estoque</span><b id="qe-${i}">${it.quantidade_estoque}</b></div>
-        <div><span class="muted">Custo un.</span><b id="cu-${i}">${brl(it.custo_unitario_estoque)}</b></div>
+      <div class="meta">Comprado: ${arred(it.quantidade_nf)} ${it.unidade_nf||''}${it.codigo_barras?' · EAN '+it.codigo_barras:''}</div>
+      <div class="conv">
+        <div class="chips">
+          <button class="chip ${peso?'on':''}" onclick="setModo(${i},'peso')">A peso / volume</button>
+          <button class="chip ${peso?'':'on'}" onclick="setModo(${i},'unidade')">Por unidade / caixa</button>
+        </div>
+        <div class="muted small" style="margin-top:12px">Unidade no estoque</div>
+        <div class="chips">${uChips}</div>
+        ${peso ? '' : `<label>Quantos <b>${u}</b> vêm em 1 ${it.unidade_nf||'compra'}?</label>
+          <input type="number" inputmode="decimal" value="${esc(it.fator_conversao)}" onchange="setFator(${i},this.value)">`}
+        <div class="prev" id="prev-${i}">${previewTexto(it)}</div>
       </div>`;
     if(novo){
       html += `<div style="margin-top:12px;border-top:1px dashed var(--line);padding-top:10px">
-        <input placeholder="Nome interno" value="${it.descricao_original}" onchange="confData.itens[${i}].nome_interno=this.value" style="margin-bottom:8px">
-        <div class="row">
-          <select onchange="confData.itens[${i}].categoria_id=this.value" id="cat-${i}"><option value="">Categoria…</option></select>
-          <input placeholder="Un. estoque" value="UN" onchange="confData.itens[${i}].unidade_estoque=this.value">
-        </div>
-        <input type="number" placeholder="Estoque mínimo" onchange="confData.itens[${i}].estoque_minimo=this.value" style="margin-top:8px">
+        <label>Nome interno</label>
+        <input value="${esc(it.nome_interno)}" placeholder="Nome do produto" onchange="confData.itens[${i}].nome_interno=this.value">
+        <label>Categoria</label>
+        <select id="cat-${i}" onchange="onCatChange(${i},this.value)"><option value="">Categoria…</option></select>
+        <label>Estoque mínimo (${u})</label>
+        <input type="number" inputmode="decimal" value="${esc(it.estoque_minimo)}" placeholder="0" onchange="confData.itens[${i}].estoque_minimo=this.value">
       </div>`;
     }
     html += `</div>`;
   });
+
   html += `<div class="sec-title">Parcelas / Contas a pagar</div>`;
   r.parcelas.forEach((p,i)=>{
     html += `<div class="item"><div class="top">
@@ -364,21 +440,106 @@ function renderConferencia(){
   c.innerHTML = html;
   carregarCategoriasNosSelects();
 }
-function ajustarFator(i, val){
-  const f = parseFloat(val)||1;
+function setModo(i, modo){
   const it = confData.itens[i];
-  it.fator_conversao = f;
-  it.quantidade_estoque = it.quantidade_nf * f;
-  it.custo_unitario_estoque = it.quantidade_estoque>0 ? it.valor_total_nf/it.quantidade_estoque : 0;
-  document.getElementById('qe-'+i).textContent = it.quantidade_estoque;
-  document.getElementById('cu-'+i).textContent = brl(it.custo_unitario_estoque);
+  it._modo = modo;
+  if(modo==='peso'){ it.fator_conversao=1; if(!UNI_PESO.includes(it.unidade_estoque)) it.unidade_estoque='KG'; }
+  else { if(!UNI_UN.includes(it.unidade_estoque)) it.unidade_estoque='UN'; }
+  recalcItem(it); renderConferencia();
+}
+function setUnidade(i, val){
+  const it = confData.itens[i];
+  it.unidade_estoque = String(val||'UN').trim().toUpperCase() || 'UN';
+  renderConferencia();
+}
+function setFator(i, val){
+  const it = confData.itens[i];
+  it.fator_conversao = parseFloat(val)||1;
+  recalcItem(it);
+  const el=document.getElementById('prev-'+i); if(el) el.innerHTML=previewTexto(it);
 }
 let catCache = null;
 async function carregarCategoriasNosSelects(){
-  if(!catCache){ try{ catCache = (await api('/api/listar?aba=Categorias')).rows; }catch{ catCache=[]; } }
+  if(!catCache){ try{ catCache = (await api('/api/categorias')).rows; }catch{ catCache=[]; } }
+  const ativas = (catCache||[]).filter(c=>String(c.ativo||'SIM').toUpperCase()==='SIM');
   confData.itens.forEach((it,i)=>{
+    if(!it.produto_novo) return;
     const sel = document.getElementById('cat-'+i);
-    if(sel) catCache.forEach(c=> sel.insertAdjacentHTML('beforeend', `<option value="${c.id_categoria}">${c.nome_categoria}</option>`));
+    if(!sel) return;
+    sel.innerHTML = '<option value="">Categoria…</option>'
+      + ativas.map(c=>`<option value="${c.id_categoria}">${c.nome_categoria}</option>`).join('')
+      + '<option value="__nova__">➕ Criar nova…</option>';
+    if(it.categoria_id) sel.value = it.categoria_id;
+  });
+}
+async function onCatChange(i, val){
+  if(val==='__nova__'){
+    const nome = await pedirTexto('Nova categoria');
+    const sel = document.getElementById('cat-'+i);
+    if(!nome){ if(sel) sel.value = confData.itens[i].categoria_id||''; return; }
+    try{
+      const id = await garantirCategoria(nome);
+      confData.itens[i].categoria_id = id;
+      await carregarCategoriasNosSelects();
+    }catch(e){ toast(e.message,'err'); }
+    return;
+  }
+  confData.itens[i].categoria_id = val;
+}
+async function garantirCategoria(nome){
+  nome = String(nome||'').trim();
+  if(!nome) return '';
+  if(!catCache){ try{ catCache=(await api('/api/categorias')).rows; }catch{ catCache=[]; } }
+  const achado = catCache.find(c=>String(c.nome_categoria||'').trim().toLowerCase()===nome.toLowerCase()
+    && String(c.ativo||'SIM').toUpperCase()==='SIM');
+  if(achado) return achado.id_categoria;
+  const r = await api('/api/categorias',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({acao:'criar',nome_categoria:nome})});
+  catCache.push({id_categoria:r.id_categoria, nome_categoria:r.nome_categoria||nome, ativo:'SIM'});
+  return r.id_categoria;
+}
+async function sugerirComIA(){
+  const novos = confData.itens.map((it,i)=>({i,it})).filter(x=>x.it.produto_novo);
+  if(!novos.length){ toast('Não há produtos novos para sugerir.','err'); return; }
+  toast('Consultando IA…');
+  try{
+    const r = await api('/api/ia/sugerir',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({itens:novos.map(x=>x.it)})});
+    const sug = r.sugestoes||[];
+    for(let k=0;k<novos.length;k++){
+      const s = sug[k]; if(!s) continue;
+      const it = novos[k].it;
+      if(s.nome_interno) it.nome_interno = s.nome_interno;
+      if(s.unidade_estoque) it.unidade_estoque = String(s.unidade_estoque).toUpperCase();
+      it._modo = s.eh_peso ? 'peso' : 'unidade';
+      it.fator_conversao = s.eh_peso ? 1 : (parseFloat(s.fator_conversao)||1);
+      if(s.categoria){ try{ it.categoria_id = await garantirCategoria(s.categoria); }catch(_){} }
+      recalcItem(it);
+    }
+    renderConferencia();
+    toast('Sugestões da IA aplicadas ✓','ok');
+  }catch(e){
+    if(e.status===503){ toast('IA não configurada. Veja a aba Config.','err'); return; }
+    toast(e.message,'err');
+  }
+}
+function pedirTexto(titulo, inicial=''){
+  return new Promise(resolve=>{
+    const ov = document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:24px';
+    ov.innerHTML=`<div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;width:100%;max-width:360px">
+      <div style="font-weight:600;margin-bottom:12px">${titulo}</div>
+      <input id="_pt_in" value="${esc(inicial)}">
+      <div class="row" style="margin-top:14px">
+        <button class="btn-2 btn-sm" style="padding:11px" id="_pt_cancel">Cancelar</button>
+        <button class="btn-2 btn-sm" style="padding:11px;background:var(--accent);color:#06120c" id="_pt_ok">OK</button>
+      </div></div>`;
+    document.body.appendChild(ov);
+    const inp=ov.querySelector('#_pt_in'); setTimeout(()=>inp.focus(),50);
+    const done=v=>{ ov.remove(); resolve(v); };
+    ov.querySelector('#_pt_cancel').onclick=()=>done(null);
+    ov.querySelector('#_pt_ok').onclick=()=>done(inp.value.trim()||null);
+    inp.addEventListener('keydown',e=>{ if(e.key==='Enter') done(inp.value.trim()||null); });
   });
 }
 async function confirmarImportacao(){
@@ -646,14 +807,80 @@ async function rodarDiagnostico(){
       return `<div class="list-row"><div><div class="t">${titulo}</div>${det}</div><div>${badge}</div></div>`;
     };
     const c = d.checagens;
-    box.innerHTML = `<div class="card">
+    box.innerHTML = `<div style="margin-top:10px">
       <h3 style="font-size:16px;margin-bottom:6px">${d.tudo_ok?'✓ Tudo configurado':'⚠ Há pendências'}</h3>
       ${linha('Variáveis de ambiente', c.variaveis_ambiente)}
-      ${linha('Google Sheets', c.google_sheets)}
+      ${linha('Banco Supabase', c.supabase)}
+      ${c.supabase_key?linha('Chave do Supabase', c.supabase_key):''}
       ${linha('API Meu Danfe', c.meu_danfe)}
+      ${c.ia_gemini?linha('IA (Gemini)', c.ia_gemini):''}
       ${c.busca_real?linha('Busca real de NF-e', c.busca_real):''}
     </div>`;
   }catch(e){ box.innerHTML = `<div class="alertbar" style="margin-top:10px">${e.message}</div>`; }
+}
+
+/* CONFIGURAÇÕES */
+function rotuloConfig(k){
+  return {CNPJ_RESTAURANTE:'CNPJ do restaurante',MAX_TENTATIVAS_NFE:'Máx. tentativas por NF-e',
+    INTERVALO_TENTATIVAS_MS:'Intervalo entre tentativas (ms)',LIMITE_CONSULTAS_SEGUNDO:'Consultas por segundo'}[k]||k;
+}
+async function loadConfig(){
+  try{
+    catCache = (await api('/api/categorias')).rows;
+    renderCatList();
+  }catch(e){ document.getElementById('cat-list').innerHTML=`<div class="empty">${e.message}</div>`; }
+  try{
+    const rows = (await api('/api/config')).rows;
+    document.getElementById('config-regras').innerHTML = rows.map(r=>`
+      <label>${rotuloConfig(r.chave)}</label>
+      <div class="row">
+        <input id="cfg-${r.chave}" value="${esc(r.valor)}" placeholder="${esc(r.descricao)}">
+        <button class="btn-2 btn-sm" style="padding:0 16px" onclick="salvarRegra('${r.chave}')">Salvar</button>
+      </div>`).join('');
+  }catch(e){ document.getElementById('config-regras').innerHTML=`<div class="empty">${e.message}</div>`; }
+}
+function renderCatList(){
+  const el = document.getElementById('cat-list');
+  const cats = catCache||[];
+  if(!cats.length){ el.innerHTML='<div class="muted small">Nenhuma categoria ainda.</div>'; return; }
+  el.innerHTML = cats.map(c=>{
+    const ativo = String(c.ativo||'SIM').toUpperCase()==='SIM';
+    return `<div class="list-row"><div><div class="t">${c.nome_categoria||'—'} ${ativo?'':'<span class="badge b-wait">inativa</span>'}</div></div>
+      <div style="display:flex;gap:6px;flex:0 0 auto">
+        <button class="btn-2 btn-sm" style="padding:6px 10px;font-size:12px" onclick="renomearCategoria('${c.id_categoria}')">Renomear</button>
+        <button class="btn-2 btn-sm" style="padding:6px 10px;font-size:12px" onclick="toggleCategoria('${c.id_categoria}','${ativo?'desativar':'ativar'}')">${ativo?'Desativar':'Ativar'}</button>
+      </div></div>`;
+  }).join('');
+}
+async function criarCategoria(){
+  const inp = document.getElementById('nova-cat'); const nome = inp.value.trim();
+  if(!nome){ toast('Informe o nome da categoria.','err'); return; }
+  try{
+    await api('/api/categorias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'criar',nome_categoria:nome})});
+    inp.value=''; catCache=(await api('/api/categorias')).rows; renderCatList(); toast('Categoria criada ✓','ok');
+  }catch(e){ toast(e.message,'err'); }
+}
+async function renomearCategoria(id){
+  const atual = (catCache||[]).find(c=>c.id_categoria===id);
+  const nome = await pedirTexto('Renomear categoria', atual?atual.nome_categoria:'');
+  if(!nome) return;
+  try{
+    await api('/api/categorias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'renomear',id_categoria:id,nome_categoria:nome})});
+    catCache=(await api('/api/categorias')).rows; renderCatList(); toast('Renomeada ✓','ok');
+  }catch(e){ toast(e.message,'err'); }
+}
+async function toggleCategoria(id, acao){
+  try{
+    await api('/api/categorias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao,id_categoria:id})});
+    catCache=(await api('/api/categorias')).rows; renderCatList();
+  }catch(e){ toast(e.message,'err'); }
+}
+async function salvarRegra(chave){
+  const v = document.getElementById('cfg-'+chave).value;
+  try{
+    await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave,valor:v})});
+    toast('Salvo ✓','ok');
+  }catch(e){ toast(e.message,'err'); }
 }
 
 loadDash();

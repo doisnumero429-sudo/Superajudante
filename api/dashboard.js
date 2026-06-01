@@ -32,6 +32,22 @@ export default async function handler(req, res) {
 
     const ultimasMov = movs.slice(-10).reverse();
 
+    // Consumo dos ultimos 30 dias: soma das SAIDAs por produto.
+    const corte = new Date(hoje); corte.setDate(corte.getDate() - 30);
+    const corteStr = `${corte.getFullYear()}-${String(corte.getMonth() + 1).padStart(2, '0')}-${String(corte.getDate()).padStart(2, '0')}`;
+    const nomeProd = Object.fromEntries(produtos.map((p) => [p.id_produto, p.nome_interno || p.descricao_original_nf]));
+    const consumo = {};
+    for (const m of movs) {
+      if (String(m.tipo).toUpperCase() !== 'SAIDA') continue;
+      if (String(m.data || '').slice(0, 10) < corteStr) continue;
+      const id = m.id_produto;
+      consumo[id] = (consumo[id] || 0) + Math.abs(parseFloat(m.quantidade) || 0);
+    }
+    const consumo30d = Object.entries(consumo)
+      .map(([id, qtd]) => ({ nome: nomeProd[id] || id, quantidade: Number(qtd.toFixed(3)) }))
+      .sort((a, b) => b.quantidade - a.quantidade)
+      .slice(0, 5);
+
     return json(res, 200, {
       produtos_cadastrados: ativos.length,
       produtos_estoque_baixo: estoqueBaixo.length,
@@ -43,6 +59,7 @@ export default async function handler(req, res) {
       total_em_aberto: Number(totalAberto.toFixed(2)),
       contas_pendentes_info: pendentes.length,
       ultimas_movimentacoes: ultimasMov,
+      consumo_30d: consumo30d,
       lista_estoque_baixo: estoqueBaixo.map((p) => ({
         nome: p.nome_interno, estoque: p.estoque_atual, minimo: p.estoque_minimo,
       })),

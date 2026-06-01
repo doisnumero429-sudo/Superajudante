@@ -391,17 +391,13 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <div id="treino-est-result" style="margin-top:10px"></div>
   </div>
 
-  <details style="margin-top:12px">
-    <summary style="cursor:pointer;font-size:13px;color:var(--muted);padding:8px 0">Opções avançadas</summary>
-    <div class="card" style="margin-top:8px">
-      <p class="muted small" style="margin-bottom:10px">Exportações individuais e limpeza da esteira.</p>
-      <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="exportarContexto('treino-adv-box')">⬇ Exportar contexto atual</button>
-      <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="exportarDesconhecidos('treino-adv-box')">⬇ Exportar produtos desconhecidos (banco)</button>
-      <div id="treino-adv-box" class="muted small" style="margin-top:8px;margin-bottom:12px"></div>
-      <button class="btn-2" style="width:100%;padding:12px;background:rgba(220,50,50,.1);color:var(--danger);border-color:rgba(220,50,50,.3)" onclick="limparEsteira()">🗑 Limpar esteira de treinamento</button>
-      <button class="btn-2" style="width:100%;padding:12px;margin-top:8px;background:rgba(220,50,50,.2);color:var(--danger);border-color:rgba(220,50,50,.5);font-weight:700" onclick="resetarTreinamento()">🔴 Resetar TUDO e começar do zero</button>
-    </div>
-  </details>
+  <div class="card" style="margin-top:12px">
+    <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="exportarContexto('treino-adv-box')">⬇ Exportar contexto atual</button>
+    <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="exportarDesconhecidos('treino-adv-box')">⬇ Exportar produtos desconhecidos (banco)</button>
+    <div id="treino-adv-box" class="muted small" style="margin-bottom:4px"></div>
+    <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px;background:rgba(220,50,50,.1);color:var(--danger);border-color:rgba(220,50,50,.3)" onclick="limparEsteira()">🗑 Limpar esteira</button>
+    <button class="btn-2" style="width:100%;padding:13px;background:rgba(220,50,50,.22);color:var(--danger);border-color:rgba(220,50,50,.6);font-weight:700;font-size:15px" onclick="resetarTreinamento()">☢️ Apagar TUDO e começar do zero</button>
+  </div>
 
   <div class="card" style="margin-top:12px;background:rgba(255,180,0,.05);border-color:rgba(255,180,0,.2)">
     <p class="muted small" style="margin-bottom:8px">⚠ Precisa confirmar uma compra real no estoque?</p>

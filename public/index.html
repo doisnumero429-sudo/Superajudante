@@ -342,11 +342,19 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
 <section class="view" id="v-inv">
   <div class="card">
     <h2 style="font-size:19px">Inventário</h2>
-    <p class="muted small">Leia o código de barras ou digite.</p>
+    <p class="muted small">Conte o estoque real e ajuste automaticamente.</p>
     <button class="btn-2" id="btn-scanner-inv" style="width:100%;padding:13px;margin-top:12px" onclick="toggleScanner()">📷 Ler código de barras</button>
     <div class="scanner-wrap" id="scanner"></div>
     <label>Código de barras</label>
-    <input id="inv-ean" inputmode="numeric" placeholder="código" onchange="buscarPorEan()">
+    <input id="inv-ean" inputmode="numeric" placeholder="Digite ou escaneie o código" onchange="buscarPorEan()">
+    <div style="display:flex;align-items:center;gap:10px;margin:12px 0">
+      <div style="flex:1;height:1px;background:var(--line)"></div>
+      <span class="muted small">ou</span>
+      <div style="flex:1;height:1px;background:var(--line)"></div>
+    </div>
+    <label>Buscar produto por nome</label>
+    <input id="inv-nome" placeholder="Digite o nome do produto…" oninput="buscarPorNomeInventario()" autocomplete="off">
+    <div id="inv-nome-list" style="display:none;margin-top:6px;border:1px solid var(--line);border-radius:12px;overflow:hidden;max-height:220px;overflow-y:auto"></div>
     <div id="inv-result"></div>
   </div>
 </section>

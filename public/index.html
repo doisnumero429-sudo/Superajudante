@@ -460,7 +460,7 @@ function setFator(i, val){
 }
 let catCache = null;
 async function carregarCategoriasNosSelects(){
-  if(!catCache){ try{ catCache = (await api('/api/categorias')).rows; }catch{ catCache=[]; } }
+  if(!catCache){ try{ catCache = (await api('/api/admin?recurso=categorias')).rows; }catch{ catCache=[]; } }
   const ativas = (catCache||[]).filter(c=>String(c.ativo||'SIM').toUpperCase()==='SIM');
   confData.itens.forEach((it,i)=>{
     if(!it.produto_novo) return;
@@ -489,11 +489,11 @@ async function onCatChange(i, val){
 async function garantirCategoria(nome){
   nome = String(nome||'').trim();
   if(!nome) return '';
-  if(!catCache){ try{ catCache=(await api('/api/categorias')).rows; }catch{ catCache=[]; } }
+  if(!catCache){ try{ catCache=(await api('/api/admin?recurso=categorias')).rows; }catch{ catCache=[]; } }
   const achado = catCache.find(c=>String(c.nome_categoria||'').trim().toLowerCase()===nome.toLowerCase()
     && String(c.ativo||'SIM').toUpperCase()==='SIM');
   if(achado) return achado.id_categoria;
-  const r = await api('/api/categorias',{method:'POST',headers:{'Content-Type':'application/json'},
+  const r = await api('/api/admin?recurso=categorias',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({acao:'criar',nome_categoria:nome})});
   catCache.push({id_categoria:r.id_categoria, nome_categoria:r.nome_categoria||nome, ativo:'SIM'});
   return r.id_categoria;
@@ -503,7 +503,7 @@ async function sugerirComIA(){
   if(!novos.length){ toast('Não há produtos novos para sugerir.','err'); return; }
   toast('Consultando IA…');
   try{
-    const r = await api('/api/ia/sugerir',{method:'POST',headers:{'Content-Type':'application/json'},
+    const r = await api('/api/admin?recurso=ia',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({itens:novos.map(x=>x.it)})});
     const sug = r.sugestoes||[];
     for(let k=0;k<novos.length;k++){
@@ -826,11 +826,11 @@ function rotuloConfig(k){
 }
 async function loadConfig(){
   try{
-    catCache = (await api('/api/categorias')).rows;
+    catCache = (await api('/api/admin?recurso=categorias')).rows;
     renderCatList();
   }catch(e){ document.getElementById('cat-list').innerHTML=`<div class="empty">${e.message}</div>`; }
   try{
-    const rows = (await api('/api/config')).rows;
+    const rows = (await api('/api/admin?recurso=config')).rows;
     document.getElementById('config-regras').innerHTML = rows.map(r=>`
       <label>${rotuloConfig(r.chave)}</label>
       <div class="row">
@@ -856,8 +856,8 @@ async function criarCategoria(){
   const inp = document.getElementById('nova-cat'); const nome = inp.value.trim();
   if(!nome){ toast('Informe o nome da categoria.','err'); return; }
   try{
-    await api('/api/categorias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'criar',nome_categoria:nome})});
-    inp.value=''; catCache=(await api('/api/categorias')).rows; renderCatList(); toast('Categoria criada ✓','ok');
+    await api('/api/admin?recurso=categorias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'criar',nome_categoria:nome})});
+    inp.value=''; catCache=(await api('/api/admin?recurso=categorias')).rows; renderCatList(); toast('Categoria criada ✓','ok');
   }catch(e){ toast(e.message,'err'); }
 }
 async function renomearCategoria(id){
@@ -865,20 +865,20 @@ async function renomearCategoria(id){
   const nome = await pedirTexto('Renomear categoria', atual?atual.nome_categoria:'');
   if(!nome) return;
   try{
-    await api('/api/categorias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'renomear',id_categoria:id,nome_categoria:nome})});
-    catCache=(await api('/api/categorias')).rows; renderCatList(); toast('Renomeada ✓','ok');
+    await api('/api/admin?recurso=categorias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao:'renomear',id_categoria:id,nome_categoria:nome})});
+    catCache=(await api('/api/admin?recurso=categorias')).rows; renderCatList(); toast('Renomeada ✓','ok');
   }catch(e){ toast(e.message,'err'); }
 }
 async function toggleCategoria(id, acao){
   try{
-    await api('/api/categorias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao,id_categoria:id})});
-    catCache=(await api('/api/categorias')).rows; renderCatList();
+    await api('/api/admin?recurso=categorias',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao,id_categoria:id})});
+    catCache=(await api('/api/admin?recurso=categorias')).rows; renderCatList();
   }catch(e){ toast(e.message,'err'); }
 }
 async function salvarRegra(chave){
   const v = document.getElementById('cfg-'+chave).value;
   try{
-    await api('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave,valor:v})});
+    await api('/api/admin?recurso=config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave,valor:v})});
     toast('Salvo ✓','ok');
   }catch(e){ toast(e.message,'err'); }
 }

@@ -738,10 +738,11 @@ function badgeEstoque(p){
 
 async function loadEstoque(){
   try{
-    const [prodData] = await Promise.all([
+    const [prodData, catData] = await Promise.all([
       api('/api/listar?aba=Produtos'),
-      catCache ? Promise.resolve() : api('/api/admin?recurso=categorias').then(r=>{ catCache=r.rows; }),
+      api('/api/admin?recurso=categorias'),
     ]);
+    catCache=catData.rows;
     estoqueCache = prodData.rows.filter(p=>String(p.ativo).toUpperCase()==='SIM');
     renderFiltros();
     filtrarEstoque();
@@ -759,7 +760,7 @@ function renderFiltros(){
   if(catCache) catCache.filter(c=>String(c.ativo||'SIM').toUpperCase()==='SIM')
     .forEach(c=>chips.push({id:'cat:'+c.id_categoria, label:c.nome_categoria}));
   document.getElementById('est-filtros').innerHTML = chips.map(c=>
-    `<button class="chip est-chip${estoqueFiltro===c.id?' on':''}" onclick="setEstoqueFiltro(${JSON.stringify(c.id)})">${esc(c.label)}</button>`
+    `<button class="chip est-chip${estoqueFiltro===c.id?' on':''}" onclick="setEstoqueFiltro('${c.id}')">${esc(c.label)}</button>`
   ).join('');
 }
 
@@ -771,7 +772,15 @@ function setEstoqueFiltro(f){
 
 function renderEstoque(list){
   const el=document.getElementById('estoque-list');
-  if(!list.length){ el.innerHTML='<div class="empty">Nenhum produto encontrado.</div>'; return; }
+  if(!list.length){
+    let msg='Nenhum produto encontrado.';
+    if(estoqueFiltro.startsWith('cat:')){
+      const catId=estoqueFiltro.slice(4);
+      const catNome=catCache?(catCache.find(c=>c.id_categoria===catId)?.nome_categoria||'esta categoria'):'esta categoria';
+      msg=`Nenhum produto em "${catNome}".<br><small>Toque em um produto e atribua a categoria para ele aparecer aqui.</small>`;
+    }
+    el.innerHTML=`<div class="empty">${msg}</div>`; return;
+  }
   el.innerHTML=list.map(p=>{
     const s=statusCadastro(p);
     const baixo=p.estoque_minimo!==''&&parseFloat(p.estoque_minimo)>0&&parseFloat(p.estoque_atual)<=parseFloat(p.estoque_minimo);

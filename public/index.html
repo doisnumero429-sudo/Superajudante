@@ -207,6 +207,11 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
   <div class="sec-title">Regras</div>
   <div class="card" id="config-regras"><div class="muted small">Carregando…</div></div>
 
+  <div class="sec-title">IA (Gemini)</div>
+  <div class="card" id="ia-status-card">
+    <div class="muted small">Verificando…</div>
+  </div>
+
   <div class="sec-title">Diagnóstico</div>
   <div class="card">
     <button class="btn-2" style="width:100%;padding:12px" onclick="rodarDiagnostico()">⚙ Testar configuração</button>
@@ -519,7 +524,7 @@ async function sugerirComIA(){
     renderConferencia();
     toast('Sugestões da IA aplicadas ✓','ok');
   }catch(e){
-    if(e.status===503){ toast('IA não configurada. Veja a aba Config.','err'); return; }
+    if(e.status===503){ toast('IA não ativa. Configure GEMINI_API_KEY nas variáveis de ambiente do Vercel.','err'); return; }
     toast(e.message,'err');
   }
 }
@@ -825,6 +830,7 @@ function rotuloConfig(k){
     INTERVALO_TENTATIVAS_MS:'Intervalo entre tentativas (ms)',LIMITE_CONSULTAS_SEGUNDO:'Consultas por segundo'}[k]||k;
 }
 async function loadConfig(){
+  loadIaStatus();
   try{
     catCache = (await api('/api/admin?recurso=categorias')).rows;
     renderCatList();
@@ -838,6 +844,26 @@ async function loadConfig(){
         <button class="btn-2 btn-sm" style="padding:0 16px" onclick="salvarRegra('${r.chave}')">Salvar</button>
       </div>`).join('');
   }catch(e){ document.getElementById('config-regras').innerHTML=`<div class="empty">${e.message}</div>`; }
+}
+async function loadIaStatus(){
+  const box = document.getElementById('ia-status-card');
+  try{
+    const d = await api('/api/teste');
+    const ia = d.checagens?.ia_gemini;
+    const ativa = ia?.ok && ia?.motivo?.includes('definida');
+    if(ativa){
+      box.innerHTML=`<div style="color:var(--accent);font-weight:600">✓ IA ativa</div>
+        <div class="muted small" style="margin-top:4px">Sugestões automáticas de produtos com Gemini habilitadas.</div>`;
+    } else {
+      box.innerHTML=`<div style="color:var(--warn);font-weight:600">⚠ IA não configurada</div>
+        <div class="muted small" style="margin-top:6px;line-height:1.6">
+          Para ativar as sugestões automáticas de produtos:<br>
+          1. Acesse <strong>aistudio.google.com/apikey</strong> e gere uma chave gratuita.<br>
+          2. No painel do Vercel → Settings → Environment Variables → adicione <strong>GEMINI_API_KEY</strong>.<br>
+          3. Faça um novo deploy (Deployments → ⋯ → Redeploy).
+        </div>`;
+    }
+  }catch(e){ box.innerHTML=`<div class="muted small">${e.message}</div>`; }
 }
 function renderCatList(){
   const el = document.getElementById('cat-list');

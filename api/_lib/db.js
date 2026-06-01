@@ -31,6 +31,8 @@ export const TABLES = {
   Produto_Fornecedor:    { table: 'produto_fornecedor',     pk: 'id_pf' },
   Aliases_Produto:       { table: 'aliases_produto',        pk: 'id_alias' },
   Treino_Importacoes:    { table: 'treino_importacoes',     pk: 'id_importacao' },
+  Treino_Fila:           { table: 'treino_fila',           pk: 'id_fila' },
+  Treino_Itens:          { table: 'treino_itens',          pk: 'id_item_fila' },
 };
 
 export async function readRows(sheetName) {
@@ -79,4 +81,11 @@ export async function readConfig() {
   const { data, error } = await getClient().from('configuracoes').select('chave, valor');
   if (error) throw new Error(error.message);
   return Object.fromEntries(data.map((r) => [r.chave, r.valor]));
+}
+
+export async function deleteAllRows(sheetName) {
+  const meta = TABLES[sheetName];
+  if (!meta) throw new Error(`Tabela desconhecida: ${sheetName}`);
+  const { error } = await getClient().from(meta.table).delete().gte(meta.pk, '');
+  if (error) throw new Error(error.message);
 }

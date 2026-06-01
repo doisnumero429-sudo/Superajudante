@@ -118,29 +118,28 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
   <div class="card" id="dash-movs"><div class="muted small">—</div></div>
 </section>
 
-<!-- IMPORTAR -->
+<!-- ENTRADA DE NF-e -->
 <section class="view" id="v-import">
+  <div style="font-size:13px;padding:10px 12px;border-radius:10px;margin-bottom:12px;background:rgba(255,180,0,.07);border:1px solid rgba(255,180,0,.25);color:var(--warn)">
+    ⚠ <b>Entrada de NF-e</b> — confirmar esta nota vai alterar estoque, custo médio e criar contas a pagar.
+    <button class="btn-2" style="width:100%;padding:9px;margin-top:8px;font-size:12px;color:var(--muted)" onclick="nav('treino')">🎓 Prefere treinar? → Abrir Esteira de Treinamento</button>
+  </div>
   <div class="card">
-    <div style="display:flex;gap:8px;margin-bottom:14px">
-      <button class="chip est-chip on" id="modo-treinar" onclick="setNfeModo('treinar')" style="flex:1;padding:10px;font-size:13px">🎓 Treinar NF-e</button>
-      <button class="chip est-chip" id="modo-entrada" onclick="setNfeModo('entrada')" style="flex:1;padding:10px;font-size:13px">📦 Dar Entrada</button>
-    </div>
-    <div id="nfe-modo-desc" style="font-size:13px;margin-bottom:14px;padding:10px;border-radius:10px"></div>
-    <h2 id="nfe-import-titulo" style="font-size:19px;margin-bottom:4px">Treinar NF-e</h2>
-    <p class="muted small">Cole a chave de acesso de 44 dígitos.</p>
+    <h2 style="font-size:19px;margin-bottom:4px">Entrada de NF-e</h2>
+    <p class="muted small">Use esta tela quando a compra realmente entrou no estoque.</p>
     <label>Chave de acesso</label>
     <input class="chave-input" id="chave" inputmode="numeric" maxlength="54" placeholder="0000 0000 0000 … (44 números)">
     <div class="small muted" id="chave-count" style="margin-top:6px">0 / 44 dígitos</div>
     <button class="btn-2" id="btn-scanner-nfe" style="width:100%;padding:13px;margin-top:10px" onclick="toggleScannerNFe()">📷 Escanear QR code da NF-e</button>
     <div class="scanner-wrap" id="scanner-nfe"></div>
-    <button class="btn" id="btn-buscar" onclick="buscarNfe()">Ler nota</button>
+    <button class="btn" id="btn-buscar" onclick="buscarNfe()">Buscar nota</button>
     <div class="status-box" id="status-box"></div>
     <hr>
     <details>
       <summary class="muted small" style="cursor:pointer">Já tenho o arquivo XML</summary>
       <label>Colar conteúdo do XML</label>
       <textarea id="xml-manual" rows="4" placeholder="<?xml version=..."></textarea>
-      <button class="btn-2" style="width:100%;padding:13px;margin-top:10px" onclick="enviarXmlManual()">Ler este XML</button>
+      <button class="btn-2" style="width:100%;padding:13px;margin-top:10px" onclick="enviarXmlManual()">Importar deste XML</button>
     </details>
   </div>
 </section>
@@ -336,6 +335,64 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
   </div>
 </section>
 
+<!-- ESTEIRA DE TREINAMENTO -->
+<section class="view" id="v-treino">
+  <div style="font-size:13px;padding:10px 12px;border-radius:10px;margin-bottom:12px;background:rgba(128,255,180,.07);border:1px solid rgba(128,255,180,.18);color:var(--muted)">
+    🎓 <b style="color:var(--fg)">Esteira de Treinamento</b> — Você pode bipar várias NF-es em sequência. Nada será lançado no estoque aqui.
+  </div>
+
+  <div class="card">
+    <label>Chave de acesso da NF-e</label>
+    <input class="chave-input" id="treino-chave" inputmode="numeric" maxlength="54" placeholder="0000 0000 0000 … (44 números)">
+    <div class="small muted" id="treino-chave-count" style="margin-top:6px">0 / 44 dígitos</div>
+    <button class="btn-2" id="btn-scanner-treino" style="width:100%;padding:13px;margin-top:10px" onclick="toggleScannerTreino()">📷 Escanear QR code da NF-e</button>
+    <div class="scanner-wrap" id="scanner-treino"></div>
+    <button class="btn" id="btn-treino-add" onclick="adicionarNaEsteira()">+ Adicionar NF-e à esteira</button>
+    <div id="treino-add-status" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card" id="treino-stats-card" style="margin-top:12px">
+    <div id="treino-stats-content"><div class="muted small">Nenhuma NF-e na esteira ainda. Bipe uma nota acima para começar.</div></div>
+  </div>
+
+  <div style="margin-top:14px">
+    <button class="btn" id="btn-copiar-pacote" style="width:100%;padding:14px;font-size:15px" onclick="copiarPacoteCompleto()">📋 Copiar pacote completo para ChatGPT</button>
+    <p class="muted small" style="text-align:center;margin-top:6px;margin-bottom:0">Use este botão para copiar comando + contexto + produtos desconhecidos de uma vez.</p>
+    <button class="btn-2" style="width:100%;padding:12px;margin-top:8px" onclick="baixarPacoteCompleto()">⬇ Baixar pacote completo (.txt)</button>
+  </div>
+
+  <div id="treino-fila-lista" style="margin-top:12px"></div>
+
+  <div class="card" style="margin-top:12px">
+    <div class="sec-title" style="margin-top:0">Importar resposta do ChatGPT</div>
+    <p class="muted small" style="margin-bottom:10px">Cole o JSON revisado pelo ChatGPT, valide e importe. Esta importação <b>não altera estoque</b>.</p>
+    <label>JSON revisado pelo ChatGPT</label>
+    <textarea id="treino-est-json" rows="5" placeholder='{"schema_version":"1.0","tipo":"catalogo_revisado_gpt",...}'></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn-2 btn-sm" style="width:100%;padding:11px" onclick="validarTreino('treino-est-json','treino-est-result')">Validar JSON</button>
+      <button class="btn-2 btn-sm" style="width:100%;padding:11px;background:var(--accent);color:#06120c" onclick="importarTreinoEsteira()">Importar aprendizado</button>
+    </div>
+    <div id="treino-est-result" style="margin-top:10px"></div>
+  </div>
+
+  <details style="margin-top:12px">
+    <summary style="cursor:pointer;font-size:13px;color:var(--muted);padding:8px 0">Opções avançadas</summary>
+    <div class="card" style="margin-top:8px">
+      <p class="muted small" style="margin-bottom:10px">Exportações individuais e limpeza da esteira.</p>
+      <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="exportarContexto('treino-adv-box')">⬇ Exportar contexto atual</button>
+      <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="exportarDesconhecidos('treino-adv-box')">⬇ Exportar produtos desconhecidos (banco)</button>
+      <button class="btn-2" style="width:100%;padding:12px" onclick="copiarComandoGPT()">📋 Copiar comando para o ChatGPT (só)</button>
+      <div id="treino-adv-box" class="muted small" style="margin-top:8px;margin-bottom:12px"></div>
+      <button class="btn-2" style="width:100%;padding:12px;background:rgba(220,50,50,.1);color:var(--danger);border-color:rgba(220,50,50,.3)" onclick="limparEsteira()">🗑 Limpar esteira de treinamento</button>
+    </div>
+  </details>
+
+  <div class="card" style="margin-top:12px;background:rgba(255,180,0,.05);border-color:rgba(255,180,0,.2)">
+    <p class="muted small" style="margin-bottom:8px">⚠ Precisa confirmar uma compra real no estoque?</p>
+    <button class="btn-2" style="width:100%;padding:12px" onclick="nav('import')">📦 Ir para Entrada de NF-e →</button>
+  </div>
+</section>
+
 <!-- CONTAS -->
 <section class="view" id="v-contas">
   <div id="contas-list"><div class="empty">Carregando…</div></div>
@@ -383,8 +440,8 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
 <nav>
   <button class="active" data-v="dash" onclick="nav('dash')">
     <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Painel</button>
-  <button data-v="import" onclick="nav('import')">
-    <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>Importar</button>
+  <button data-v="treino" onclick="nav('treino')">
+    <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>Treinar</button>
   <button data-v="estoque" onclick="nav('estoque')">
     <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></svg>Estoque</button>
   <button data-v="contas" onclick="nav('contas')">
@@ -398,26 +455,6 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
 <script>
 const API = window.Capacitor?.isNativePlatform?.() ? 'https://superajudante.vercel.app' : '';
 let confData = null, estoqueCache = [], _activeScan = null;
-let nfeModo = 'treinar'; // 'treinar' | 'entrada'
-
-function setNfeModo(modo){
-  nfeModo = modo;
-  const btnT = document.getElementById('modo-treinar');
-  const btnE = document.getElementById('modo-entrada');
-  const desc = document.getElementById('nfe-modo-desc');
-  const tit  = document.getElementById('nfe-import-titulo');
-  if(btnT) btnT.classList.toggle('on', modo==='treinar');
-  if(btnE) btnE.classList.toggle('on', modo==='entrada');
-  if(modo==='treinar'){
-    if(tit) tit.textContent='Treinar NF-e';
-    if(desc){ desc.style.background='rgba(128,255,180,.07)'; desc.style.border='1px solid rgba(128,255,180,.18)'; desc.style.color='var(--muted)';
-      desc.innerHTML='<b style="color:var(--fg)">Modo treinamento</b> — o sistema lê a nota e identifica produtos, mas <b>não altera o estoque</b>. Use esta tela para ensinar o sistema a reconhecer produtos das notas fiscais.'; }
-  } else {
-    if(tit) tit.textContent='Dar Entrada no Estoque';
-    if(desc){ desc.style.background='rgba(255,180,0,.07)'; desc.style.border='1px solid rgba(255,180,0,.25)'; desc.style.color='var(--warn)';
-      desc.innerHTML='<b>⚠ Modo entrada</b> — confirmar a nota vai <b>alterar quantidades, custo médio e criar contas a pagar</b>. Use somente quando a compra realmente entrou no estoque.'; }
-  }
-}
 
 function toast(msg, type=''){
   const t = document.getElementById('toast');
@@ -447,7 +484,7 @@ function fmtDataHora(s){
   return fmtData(s);
 }
 const hojeISO = () => { const d=new Date(); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; };
-const TITLES = {dash:['Painel','Visão geral'],import:['Importar NF-e','Buscar nota'],conf:['Conferência','Revisar antes de lançar'],
+const TITLES = {dash:['Painel','Visão geral'],import:['Entrada de NF-e','Confirmar compra'],treino:['Esteira de Treinamento','Treinar produtos'],conf:['Conferência','Revisar antes de lançar'],
   estoque:['Estoque','Produtos'],produto:['Produto','Editar cadastro'],entrada:['Entrada manual','Sem nota fiscal'],saida:['Saída','Baixa de estoque'],
   inv:['Inventário','Contagem'],contas:['Contas a pagar','Financeiro'],config:['Configurações','Ajustes e categorias']};
 
@@ -456,8 +493,9 @@ function nav(v){
   document.querySelectorAll('.view').forEach(s=>s.classList.remove('active'));
   document.getElementById('v-'+v).classList.add('active');
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active', b.dataset.v===v));
-  document.getElementById('hdr-sub').textContent = TITLES[v][0];
+  document.getElementById('hdr-sub').textContent = (TITLES[v]||[v])[0];
   if(v==='dash') loadDash();
+  if(v==='treino') loadTreino();
   if(v==='estoque') loadEstoque();
   if(v==='contas') loadContas();
   if(v==='saida') loadSaida();
@@ -501,6 +539,13 @@ chaveInput.addEventListener('input', ()=>{
   chaveInput.value = v;
   document.getElementById('chave-count').textContent = v.length + ' / 44 dígitos';
 });
+const treinoChaveInput = document.getElementById('treino-chave');
+treinoChaveInput.addEventListener('input', ()=>{
+  let v = treinoChaveInput.value.replace(/\D/g,'').slice(0,44);
+  treinoChaveInput.value = v;
+  document.getElementById('treino-chave-count').textContent = v.length + ' / 44 dígitos';
+});
+treinoChaveInput.addEventListener('keydown', e=>{ if(e.key==='Enter') adicionarNaEsteira(); });
 let pollTimer = null;
 async function buscarNfe(){
   const chave = chaveInput.value.replace(/\D/g,'');
@@ -624,40 +669,19 @@ function renderConferencia(){
     html += `</div>`;
   });
 
-  if(nfeModo === 'entrada'){
-    html += `<div class="sec-title">Parcelas / Contas a pagar</div>`;
-    r.parcelas.forEach((p,i)=>{
-      html += `<div class="item"><div class="top">
-        <div><div class="desc">Parcela ${p.numero_parcela}</div>
-        <div class="meta">${p.forma_pagamento}</div></div>
-        <div style="text-align:right"><b style="font-family:Fraunces">${brl(p.valor)}</b>
-        ${p.status==='PENDENTE_INFO'?'<div><span class="badge b-wait">sem vencimento</span></div>':''}</div></div>
-        <label>Vencimento</label><input type="date" value="${p.vencimento||''}" onchange="confData.parcelas[${i}].vencimento=this.value;confData.parcelas[${i}].status='ABERTO'">
-      </div>`;
-    });
-    html += `<div class="alertbar" style="margin-top:8px;margin-bottom:12px">⚠ Esta ação vai dar entrada no estoque e alterar quantidades. Confirme apenas se a compra realmente chegou.</div>
-      <button class="btn" onclick="confirmarImportacao()">✅ Confirmar entrada no estoque</button>
-      <button class="btn-2" style="width:100%;padding:13px;margin-top:10px" onclick="nav('import')">Cancelar</button>`;
-  } else {
-    const novos = r.itens.filter(it=>it.produto_novo).length;
-    const conf  = r.itens.length - novos;
-    html += `<div class="card" style="margin-top:16px">
-      <div style="font-weight:600;margin-bottom:6px">🎓 Treino — nota lida com sucesso</div>
-      <p class="muted small" style="margin-bottom:12px">Esta nota <b>não foi lançada no estoque</b>. Use os botões abaixo para treinar o sistema: ${conf} produto(s) já reconhecido(s), ${novos} produto(s) novo(s).</p>
-      <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="exportarContexto('treino-conf-box')">⬇ Exportar contexto atual</button>
-      <button class="btn-2" style="width:100%;padding:12px;margin-bottom:8px" onclick="exportarDesconhecidos('treino-conf-box')">⬇ Exportar produtos desconhecidos</button>
-      <button class="btn-2" style="width:100%;padding:12px" onclick="copiarComandoGPT()">📋 Copiar comando para o ChatGPT</button>
-      <div id="treino-conf-box" class="muted small" style="margin-top:8px"></div>
-      <label style="margin-top:16px">Colar JSON revisado pelo ChatGPT</label>
-      <textarea id="treino-conf-json" rows="5" placeholder='{"schema_version":"1.0","tipo":"catalogo_revisado_gpt",...}'></textarea>
-      <div class="row" style="margin-top:10px">
-        <button class="btn-2 btn-sm" style="width:100%;padding:11px" onclick="validarTreino('treino-conf-json','treino-conf-result')">Validar JSON</button>
-        <button class="btn-2 btn-sm" style="width:100%;padding:11px;background:var(--accent);color:#06120c" onclick="importarTreino(false,'treino-conf-json','treino-conf-result')">Importar aprendizado</button>
-      </div>
-      <div id="treino-conf-result" style="margin-top:10px"></div>
-    </div>
-    <button class="btn-2" style="width:100%;padding:13px;margin-top:12px" onclick="nav('import')">← Voltar</button>`;
-  }
+  html += `<div class="sec-title">Parcelas / Contas a pagar</div>`;
+  r.parcelas.forEach((p,i)=>{
+    html += `<div class="item"><div class="top">
+      <div><div class="desc">Parcela ${p.numero_parcela}</div>
+      <div class="meta">${p.forma_pagamento}</div></div>
+      <div style="text-align:right"><b style="font-family:Fraunces">${brl(p.valor)}</b>
+      ${p.status==='PENDENTE_INFO'?'<div><span class="badge b-wait">sem vencimento</span></div>':''}</div></div>
+      <label>Vencimento</label><input type="date" value="${p.vencimento||''}" onchange="confData.parcelas[${i}].vencimento=this.value;confData.parcelas[${i}].status='ABERTO'">
+    </div>`;
+  });
+  html += `<div class="alertbar" style="margin-top:8px;margin-bottom:12px">⚠ Esta ação vai dar entrada no estoque e alterar quantidades. Confirme apenas se a compra realmente chegou.</div>
+    <button class="btn" onclick="confirmarImportacao()">✅ Confirmar entrada no estoque</button>
+    <button class="btn-2" style="width:100%;padding:13px;margin-top:10px" onclick="nav('import')">Cancelar</button>`;
   c.innerHTML = html;
   carregarCategoriasNosSelects();
 }
@@ -1505,6 +1529,231 @@ async function salvarRegra(chave){
   }catch(e){ toast(e.message,'err'); }
 }
 
+/* ESTEIRA DE TREINAMENTO */
+let treinoFilaCache = { fila: [], stats: { total_notas:0, total_itens:0, total_reconhecidos:0, total_desconhecidos:0, produtos_agrupados:0 } };
+
+async function loadTreino(){
+  try{
+    const d = await api('/api/admin?recurso=treino-fila-listar');
+    treinoFilaCache = d;
+    renderTreinoStats(d.stats);
+    renderTreinoFila(d.fila);
+  }catch(e){
+    document.getElementById('treino-stats-content').innerHTML=`<div class="empty">${e.message}</div>`;
+  }
+}
+
+function renderTreinoStats(s){
+  const el=document.getElementById('treino-stats-content');
+  if(!s||!s.total_notas){
+    el.innerHTML='<div class="muted small">Nenhuma NF-e na esteira ainda. Bipe uma nota acima para começar.</div>'; return;
+  }
+  el.innerHTML=`<div class="row" style="gap:8px;flex-wrap:wrap">
+    <div class="stat" style="flex:1;min-width:90px"><div class="n">${s.total_notas}</div><div class="l">NF-es</div></div>
+    <div class="stat" style="flex:1;min-width:90px"><div class="n">${s.total_itens}</div><div class="l">Itens</div></div>
+    <div class="stat" style="flex:1;min-width:90px"><div class="n">${s.total_reconhecidos}</div><div class="l">Reconhec.</div></div>
+    <div class="stat ${s.total_desconhecidos>0?'alert':''}" style="flex:1;min-width:90px"><div class="n">${s.total_desconhecidos}</div><div class="l">Desc.</div></div>
+    <div class="stat" style="flex:1;min-width:90px"><div class="n">${s.produtos_agrupados}</div><div class="l">Agrupados</div></div>
+  </div>`;
+}
+
+function renderTreinoFila(fila){
+  const el=document.getElementById('treino-fila-lista');
+  if(!fila||!fila.length){ el.innerHTML=''; return; }
+  el.innerHTML=`<div class="sec-title">NF-es na esteira (${fila.length})</div>`
+    +fila.map(f=>`<div class="list-row">
+      <div style="flex:1"><div class="t">NF ${esc(f.numero_nota||'—')} — ${esc(f.nome_fornecedor||f.cnpj_fornecedor||'—')}</div>
+      <div class="s">${fmtData(f.data_emissao)} · ${f.total_itens} itens · ${f.total_reconhecidos} reconhec. · <b>${f.total_desconhecidos}</b> desc.</div></div>
+      <div class="v ${f.total_desconhecidos>0?'':'muted'} small">${f.total_desconhecidos>0?'⚠':''}</div>
+    </div>`).join('');
+}
+
+async function adicionarNaEsteira(){
+  const chaveEl=document.getElementById('treino-chave');
+  const chave=chaveEl.value.replace(/\D/g,'');
+  if(chave.length!==44){ toast('A chave precisa ter 44 dígitos.','err'); return; }
+  const statusEl=document.getElementById('treino-add-status');
+  const btn=document.getElementById('btn-treino-add');
+  btn.disabled=true;
+  const rnd=(icon,txt)=>statusEl.innerHTML=`<div class="status-row">${icon} <span>${txt}</span></div>`;
+  rnd('<div class="spinner"></div>','Consultando a Meu Danfe…');
+  try{
+    // Polling buscar
+    await new Promise((resolve,reject)=>{
+      const pollTimer={};
+      async function step(){
+        try{
+          const r=await api('/api/nfe/buscar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave})});
+          if(r.status==='OK'){ resolve(); return; }
+          if(r.status==='NOT_FOUND'){ reject(new Error('Nota não encontrada na SEFAZ.')); return; }
+          if(r.fatal){ reject(new Error(r.mensagem||'Erro na consulta.')); return; }
+          rnd('<div class="spinner"></div>',r.status==='WAITING'?'Aguardando processamento…':'Buscando na SEFAZ…');
+          pollTimer.t=setTimeout(step, r.reconsultar_em_ms||1500);
+        }catch(e){
+          if(e.status===409){ reject(new Error('Esta NF-e já foi confirmada no estoque. Use a tela de Entrada NF-e para novas compras.')); return; }
+          if(e.status===429&&e.data?.status==='WAITING'){ pollTimer.t=setTimeout(step,e.data.aguardar_ms||1200); return; }
+          reject(e);
+        }
+      }
+      step();
+    });
+    rnd('<div class="spinner"></div>','Nota encontrada! Conferindo produtos…');
+    const conf=await api('/api/nfe/conferir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave})});
+    rnd('<div class="spinner"></div>','Salvando na esteira…');
+    const add=await api('/api/admin?recurso=treino-fila-add',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({chave, nota:conf.nota, fornecedor:conf.fornecedor, itens:conf.itens})});
+    rnd('✓',`Adicionada! ${add.total_reconhecidos} reconhecido(s) · ${add.total_desconhecidos} desconhecido(s).`);
+    chaveEl.value=''; document.getElementById('treino-chave-count').textContent='0 / 44 dígitos';
+    await loadTreino();
+    setTimeout(()=>chaveEl.focus(),350);
+  }catch(e){
+    if(e.status===409) rnd('⚠',`Duplicata: ${e.message||'Esta NF-e já está na esteira.'}`);
+    else rnd('✕',e.message);
+  }finally{ btn.disabled=false; }
+}
+
+function montarTextoPacote(pacote){
+  const comando=`Você é o Treinador de Notas do sistema Super Ajudante Estoque do Araçá Grill.
+
+Vou enviar o contexto atual do sistema e os produtos desconhecidos acumulados da Esteira de Treinamento de NF-e.
+
+Analise os produtos, agrupe repetidos, identifique produtos já conhecidos, sugira nomes internos limpos, categorias, unidades de estoque, embalagens, aliases e mapeamentos fornecedor/produto.
+
+Use sempre CNPJ do fornecedor + código do produto da NF-e como chave principal.
+
+Não invente CNPJ, código de produto, EAN, fornecedor, preço, quantidade por caixa, fardo, pacote, barril ou embalagem.
+
+Se faltar informação importante, pergunte antes de gerar o JSON final.
+
+Se as informações forem suficientes, gere o JSON final válido para importação no Super Ajudante.
+
+Use o restaurante como Araçá Grill.
+
+O JSON final deve seguir este formato:
+
+{
+  "schema_version": "1.0",
+  "tipo": "catalogo_revisado_gpt",
+  "origem": "chatgpt",
+  "restaurante": "Araçá Grill",
+  "gerado_em": "DD/MM/AAAA HH:mm",
+  "produtos_confirmados": [],
+  "embalagens_confirmadas": [],
+  "mapeamentos_confirmados": [],
+  "aliases_confirmados": [],
+  "itens_com_duvida": [],
+  "observacoes": []
+}
+
+Quando houver dúvida importante, não gere JSON final ainda. Faça perguntas em lote.`;
+
+  let aviso='';
+  if(!pacote.tem_esteira&&pacote.desconhecidos?.aviso){
+    aviso=`\n\nAVISO: ${pacote.desconhecidos.aviso}`;
+  }
+  return `=== COMANDO PARA O CHATGPT ===${aviso}
+${comando}
+
+=== CONTEXTO DO SUPER AJUDANTE ===
+${JSON.stringify(pacote.contexto,null,2)}
+
+=== PRODUTOS DESCONHECIDOS DA ESTEIRA ===
+${JSON.stringify(pacote.desconhecidos,null,2)}`;
+}
+
+async function copiarPacoteCompleto(){
+  const btn=document.getElementById('btn-copiar-pacote');
+  btn.disabled=true;
+  const orig=btn.textContent; btn.textContent='Gerando pacote…';
+  try{
+    const pacote=await api('/api/admin?recurso=treino-fila-pacote');
+    const texto=montarTextoPacote(pacote);
+    await navigator.clipboard.writeText(texto);
+    toast('Pacote completo copiado ✓','ok');
+    if(!pacote.tem_esteira) toast('⚠ Esteira vazia — usados pendentes do banco.','');
+  }catch(e){ toast(e.message,'err'); }
+  finally{ btn.disabled=false; btn.textContent=orig; }
+}
+
+async function baixarPacoteCompleto(){
+  try{
+    const pacote=await api('/api/admin?recurso=treino-fila-pacote');
+    const texto=montarTextoPacote(pacote);
+    const blob=new Blob([texto],{type:'text/plain;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url; a.download='pacote_chatgpt_treinamento_araca_grill.txt';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    try{ await navigator.clipboard.writeText(texto); }catch(_){}
+    toast('Pacote baixado ✓','ok');
+    if(!pacote.tem_esteira) toast('⚠ Esteira vazia — usados pendentes do banco.','');
+  }catch(e){ toast(e.message,'err'); }
+}
+
+async function limparEsteira(){
+  const ok=await new Promise(resolve=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:24px';
+    ov.innerHTML=`<div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;width:100%;max-width:360px">
+      <div style="font-size:22px;text-align:center;margin-bottom:10px">🗑</div>
+      <div style="font-weight:700;font-size:16px;margin-bottom:8px;text-align:center">Limpar esteira?</div>
+      <p style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:20px">Remove as NF-es da fila de treinamento. <b style="color:var(--fg)">Não apaga produtos, estoque ou movimentações.</b></p>
+      <div class="row"><button class="btn-2 btn-sm" style="width:100%;padding:12px" id="_le_cancel">Cancelar</button>
+      <button class="btn-2 btn-sm" style="width:100%;padding:12px;background:var(--danger);color:#fff" id="_le_ok">Limpar</button></div></div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#_le_cancel').onclick=()=>{ ov.remove(); resolve(false); };
+    ov.querySelector('#_le_ok').onclick=()=>{ ov.remove(); resolve(true); };
+  });
+  if(!ok) return;
+  try{
+    await api('/api/admin?recurso=treino-fila-limpar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    toast('Esteira limpa ✓','ok');
+    await loadTreino();
+  }catch(e){ toast(e.message,'err'); }
+}
+
+async function importarTreinoEsteira(){
+  await importarTreino(false,'treino-est-json','treino-est-result');
+  const box=document.getElementById('treino-est-result');
+  if(box&&box.querySelector('.prev')){
+    setTimeout(async()=>{
+      const ok=await new Promise(resolve=>{
+        const ov=document.createElement('div');
+        ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:24px';
+        ov.innerHTML=`<div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;width:100%;max-width:360px">
+          <div style="font-size:22px;text-align:center;margin-bottom:10px">🎓</div>
+          <div style="font-weight:700;font-size:16px;margin-bottom:8px;text-align:center">Importação concluída!</div>
+          <p style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:20px">Deseja limpar a esteira de treinamento agora?</p>
+          <div class="row"><button class="btn-2 btn-sm" style="width:100%;padding:12px" id="_ie_no">Manter esteira</button>
+          <button class="btn btn-sm" style="width:100%;padding:12px" id="_ie_yes">Limpar esteira</button></div></div>`;
+        document.body.appendChild(ov);
+        ov.querySelector('#_ie_no').onclick=()=>{ ov.remove(); resolve(false); };
+        ov.querySelector('#_ie_yes').onclick=()=>{ ov.remove(); resolve(true); };
+      });
+      if(ok){
+        await api('/api/admin?recurso=treino-fila-limpar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+        toast('Esteira limpa ✓','ok');
+        await loadTreino();
+      }
+    },600);
+  }
+}
+
+function toggleScannerTreino(){
+  const el=document.getElementById('scanner-treino');
+  const btn=document.getElementById('btn-scanner-treino');
+  if(el.classList.contains('show')){ _stopActiveScan(); btn.textContent='📷 Escanear QR code da NF-e'; return; }
+  btn.textContent='⏹ Parar scanner';
+  _startScanner('scanner-treino', raw=>{
+    btn.textContent='📷 Escanear QR code da NF-e';
+    const m=raw.match(/\d{44}/);
+    if(!m){ toast('Código não reconhecido. Tente digitar a chave.','err'); return; }
+    const chaveEl=document.getElementById('treino-chave');
+    chaveEl.value=m[0];
+    document.getElementById('treino-chave-count').textContent='44 / 44 dígitos';
+    adicionarNaEsteira();
+  }).catch(e=>{ btn.textContent='📷 Escanear QR code da NF-e'; toast(e.message,'err'); });
+}
+
 /* TREINAMENTO COM CHATGPT */
 async function baixarJson(nomeArquivo, obj){
   const txt = JSON.stringify(obj, null, 2);
@@ -1615,7 +1864,6 @@ async function importarTreino(substituir, jsonId='treino-json', boxId='treino-re
   }
 }
 
-setNfeModo('treinar');
 loadDash();
 </script>
 

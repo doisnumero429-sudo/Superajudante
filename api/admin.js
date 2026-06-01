@@ -10,8 +10,12 @@
 //   recurso=treino-desconhecidos GET -> JSON com produtos pendentes agrupados
 //   recurso=treino-validar      POST { json } -> valida o catalogo revisado
 //   recurso=treino-importar     POST { json, substituir? } -> importa (aditivo)
+//   recurso=treino-fila-add       POST { chave, nota, fornecedor, itens } -> adiciona NF-e à esteira
+//   recurso=treino-fila-listar    GET  -> lista fila com stats e desconhecidos agrupados
+//   recurso=treino-fila-limpar    POST -> limpa Treino_Fila e Treino_Itens (sem tocar estoque)
+//   recurso=treino-fila-pacote    GET  -> retorna contexto + desconhecidos da esteira para ChatGPT
 
-import { readRows, appendRow, updateRow, nextId, readConfig } from './_lib/db.js';
+import { readRows, appendRow, updateRow, nextId, readConfig, deleteAllRows } from './_lib/db.js';
 import { normalizarDesc } from './_lib/parser.js';
 import { entradaEstoque } from './_lib/estoque.js';
 import { json, preflight, readBody, nowStr } from './_lib/util.js';
@@ -39,6 +43,10 @@ export default async function handler(req, res) {
     if (recurso === 'treino-desconhecidos') return await treinoDesconhecidos(req, res);
     if (recurso === 'treino-validar') return await treinoValidar(req, res);
     if (recurso === 'treino-importar') return await treinoImportar(req, res);
+    if (recurso === 'treino-fila-add') return await treinoFilaAdd(req, res);
+    if (recurso === 'treino-fila-listar') return await treinoFilaListar(req, res);
+    if (recurso === 'treino-fila-limpar') return await treinoFilaLimpar(req, res);
+    if (recurso === 'treino-fila-pacote') return await treinoFilaPacote(req, res);
     return json(res, 400, { erro: 'Recurso invalido.' });
   } catch (e) {
     return json(res, 500, { erro: e.message });
@@ -600,4 +608,224 @@ async function treinoImportar(req, res) {
   } catch { /* tabela de auditoria opcional */ }
 
   return json(res, 200, { ok: true, relatorio });
+}
+
+// ---------- ESTEIRA DE TREINAMENTO: ADICIONAR NF-E ----------
+async function treinoFilaAdd(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { erro: 'POST only' });
+  const b = await readBody(req);
+  const { chave, nota, fornecedor, itens = [] } = b;
+  if (!chave || !nota || !fornecedor) return json(res, 400, { erro: 'Dados incompletos.' });
+
+  const agora = nowStr();
+  const cnpjForn = String(fornecedor.cnpj || '').replace(/\D/g, '');
+
+  // Verifica duplicata na fila
+  let fila = [];
+  try { fila = await readRows('Treino_Fila'); } catch { /* tabela pode nao existir ainda */ }
+  const jaExiste = fila.find((f) => String(f.chave_nfe).replace(/\D/g, '') === chave);
+  if (jaExiste) return json(res, 409, { erro: 'Esta NF-e já está na esteira.', id_fila: jaExiste.id_fila });
+
+  const totalRec = itens.filter((it) => !it.produto_novo).length;
+  const totalDesc = itens.filter((it) => it.produto_novo).length;
+
+  const idFila = await nextId('Treino_Fila', 'id_fila', 'TF');
+  await appendRow('Treino_Fila', {
+    id_fila: idFila,
+    chave_nfe: chave,
+    numero_nota: nota.numero_nota || '',
+    data_emissao: nota.data_emissao || '',
+    cnpj_fornecedor: cnpjForn,
+    nome_fornecedor: fornecedor.razao_social || '',
+    status: 'OK',
+    criado_em: agora,
+    processado_em: agora,
+    total_itens: itens.length,
+    total_reconhecidos: totalRec,
+    total_desconhecidos: totalDesc,
+    total_duvidas: 0,
+    erro: '',
+  });
+
+  for (const it of itens) {
+    const idItem = await nextId('Treino_Itens', 'id_item_fila', 'TI');
+    await appendRow('Treino_Itens', {
+      id_item_fila: idItem,
+      id_fila: idFila,
+      chave_nfe: chave,
+      cnpj_fornecedor: cnpjForn,
+      nome_fornecedor: fornecedor.razao_social || '',
+      codigo_produto_nf: it.codigo_produto_nf || '',
+      ean: it.codigo_barras || '',
+      descricao_original_nfe: it.descricao_original || '',
+      descricao_normalizada: normalizarDesc(it.descricao_original || ''),
+      unidade_nfe: it.unidade_nf || '',
+      quantidade_nfe: it.quantidade_nf || 0,
+      valor_total: it.valor_total_nf || 0,
+      valor_unitario_nfe: it.valor_unitario_nf || 0,
+      data_emissao: nota.data_emissao || '',
+      produto_reconhecido: !it.produto_novo,
+      id_produto_reconhecido: it.id_produto || '',
+      nome_interno_sugerido: it.nome_interno || '',
+      produto_novo: !!it.produto_novo,
+      campos_pendentes: it.produto_novo ? JSON.stringify(['nome_interno', 'categoria']) : '[]',
+      status_revisao: 'PENDENTE',
+    });
+  }
+
+  return json(res, 200, {
+    ok: true, id_fila: idFila,
+    total_itens: itens.length, total_reconhecidos: totalRec, total_desconhecidos: totalDesc,
+  });
+}
+
+// ---------- ESTEIRA: LISTAR ----------
+async function treinoFilaListar(req, res) {
+  let fila = [], itens = [];
+  try { fila = await readRows('Treino_Fila'); } catch { /* ok */ }
+  try { itens = await readRows('Treino_Itens'); } catch { /* ok */ }
+
+  const totalRec = itens.filter((it) => !it.produto_novo).length;
+  const totalDesc = itens.filter((it) => !!it.produto_novo).length;
+
+  // Agrupa desconhecidos por CNPJ+codigo (ou CNPJ+descricao normalizada)
+  const grupos = {};
+  for (const it of itens) {
+    if (!it.produto_novo) continue;
+    const temCodigo = String(it.codigo_produto_nf || '').trim() !== '';
+    const chaveAgrup = `${it.cnpj_fornecedor || ''}|${temCodigo ? it.codigo_produto_nf : it.descricao_normalizada}`;
+    if (!grupos[chaveAgrup]) {
+      grupos[chaveAgrup] = {
+        cnpj_fornecedor: it.cnpj_fornecedor,
+        nome_fornecedor: it.nome_fornecedor,
+        codigo_produto_nf: it.codigo_produto_nf,
+        ean: it.ean,
+        descricao_original_nfe: it.descricao_original_nfe,
+        descricao_normalizada: it.descricao_normalizada,
+        unidade_nfe: it.unidade_nfe,
+        quantidade_nfe: it.quantidade_nfe,
+        valor_total: it.valor_total,
+        valor_unitario_nfe: it.valor_unitario_nfe,
+        data_emissao: it.data_emissao,
+        ocorrencias: 0,
+        notas_em_que_apareceu: [],
+        observacao: temCodigo ? null : 'Código do produto não veio na NF-e. Chave baseada em CNPJ+descrição normalizada.',
+      };
+    }
+    grupos[chaveAgrup].ocorrencias += 1;
+    if (!grupos[chaveAgrup].notas_em_que_apareceu.includes(it.chave_nfe)) {
+      grupos[chaveAgrup].notas_em_que_apareceu.push(it.chave_nfe);
+    }
+  }
+
+  return json(res, 200, {
+    fila,
+    stats: {
+      total_notas: fila.length,
+      total_itens: itens.length,
+      total_reconhecidos: totalRec,
+      total_desconhecidos: totalDesc,
+      produtos_agrupados: Object.keys(grupos).length,
+    },
+    desconhecidos_agrupados: Object.values(grupos),
+  });
+}
+
+// ---------- ESTEIRA: LIMPAR ----------
+async function treinoFilaLimpar(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { erro: 'POST only' });
+  try { await deleteAllRows('Treino_Itens'); } catch { /* ok se vazia */ }
+  try { await deleteAllRows('Treino_Fila'); } catch { /* ok se vazia */ }
+  return json(res, 200, { ok: true });
+}
+
+// ---------- ESTEIRA: PACOTE COMPLETO PARA CHATGPT ----------
+async function treinoFilaPacote(req, res) {
+  // Contexto completo do sistema
+  const [produtos, cats, fornecedores, pf, embs, aliases, cfg] = await Promise.all([
+    readRows('Produtos'), readRows('Categorias'), readRows('Fornecedores'),
+    readRows('Produto_Fornecedor'), readRows('Embalagens'), readRows('Aliases_Produto'),
+    readConfig(),
+  ]);
+  const ativos = produtos.filter((p) => String(p.ativo || 'SIM').toUpperCase() === 'SIM');
+  const contexto = {
+    schema_version: '1.0', tipo: 'contexto_super_ajudante',
+    sistema: 'Super Ajudante Estoque', restaurante: cfg.NOME_RESTAURANTE || 'Araçá Grill',
+    gerado_em: nowStr(),
+    produtos_internos: ativos.map((p) => ({
+      id_produto: p.id_produto, nome_interno: p.nome_interno,
+      categoria_id: p.categoria_id, unidade_estoque: p.unidade_estoque,
+      fator_conversao: p.fator_conversao, confirmado: p.confirmado || 'NAO',
+    })),
+    categorias: cats.map((c) => ({ id_categoria: c.id_categoria, nome_categoria: c.nome_categoria })),
+    fornecedores: fornecedores.map((f) => ({ cnpj: f.cnpj, razao_social: f.razao_social })),
+    mapeamentos_fornecedor_produto: pf,
+    embalagens: embs.filter((e) => String(e.ativo || 'SIM').toUpperCase() === 'SIM'),
+    aliases: aliases.filter((a) => String(a.ativo || 'SIM').toUpperCase() === 'SIM'),
+  };
+
+  // Desconhecidos da esteira
+  let filaRows = [], itensRows = [];
+  try { filaRows = await readRows('Treino_Fila'); } catch { /* ok */ }
+  try { itensRows = await readRows('Treino_Itens'); } catch { /* ok */ }
+
+  const temEsteira = filaRows.length > 0;
+  let desconhecidos;
+
+  if (temEsteira) {
+    const grupos = {};
+    for (const it of itensRows) {
+      if (!it.produto_novo) continue;
+      const temCodigo = String(it.codigo_produto_nf || '').trim() !== '';
+      const chaveAgrup = `${it.cnpj_fornecedor || ''}|${temCodigo ? it.codigo_produto_nf : it.descricao_normalizada}`;
+      if (!grupos[chaveAgrup]) {
+        grupos[chaveAgrup] = {
+          cnpj_fornecedor: it.cnpj_fornecedor, nome_fornecedor: it.nome_fornecedor,
+          codigo_produto_nf: it.codigo_produto_nf, ean: it.ean,
+          descricao_original_nfe: it.descricao_original_nfe,
+          descricao_normalizada: it.descricao_normalizada,
+          unidade_nfe: it.unidade_nfe, quantidade_nfe: it.quantidade_nfe,
+          valor_total: it.valor_total, valor_unitario_nfe: it.valor_unitario_nfe,
+          data_emissao: it.data_emissao, ocorrencias: 0, notas_em_que_apareceu: [],
+          observacao: !String(it.codigo_produto_nf || '').trim()
+            ? 'Código do produto não veio na NF-e. Chave baseada em CNPJ+descrição normalizada.' : null,
+        };
+      }
+      grupos[chaveAgrup].ocorrencias += 1;
+      if (!grupos[chaveAgrup].notas_em_que_apareceu.includes(it.chave_nfe)) {
+        grupos[chaveAgrup].notas_em_que_apareceu.push(it.chave_nfe);
+      }
+    }
+    desconhecidos = {
+      schema_version: '1.0', tipo: 'produtos_desconhecidos_para_gpt',
+      fonte: 'esteira_treinamento', restaurante: cfg.NOME_RESTAURANTE || 'Araçá Grill',
+      gerado_em: nowStr(),
+      resumo: {
+        notas_na_esteira: filaRows.length,
+        total_itens: itensRows.length,
+        produtos_desconhecidos: Object.keys(grupos).length,
+      },
+      itens: Object.values(grupos),
+    };
+  } else {
+    // fallback: produtos pendentes do banco
+    const pendentes = ativos.filter((p) => String(p.confirmado || 'NAO').toUpperCase() !== 'SIM');
+    desconhecidos = {
+      schema_version: '1.0', tipo: 'produtos_desconhecidos_para_gpt',
+      fonte: 'banco_pendentes',
+      aviso: 'Esteira vazia. Usando produtos pendentes já existentes no cadastro.',
+      restaurante: cfg.NOME_RESTAURANTE || 'Araçá Grill',
+      gerado_em: nowStr(),
+      resumo: { produtos_desconhecidos: pendentes.length },
+      itens: pendentes.map((p) => ({
+        produto_id: p.id_produto, cnpj_fornecedor: p.cnpj_fornecedor,
+        codigo_produto_nf: p.codigo_produto_nf,
+        descricao_original_nfe: p.descricao_original_nf,
+        descricao_normalizada: normalizarDesc(p.descricao_original_nf || ''),
+        unidade_nfe: p.unidade_compra || '',
+      })),
+    };
+  }
+
+  return json(res, 200, { tem_esteira: temEsteira, contexto, desconhecidos });
 }

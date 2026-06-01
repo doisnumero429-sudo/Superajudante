@@ -12,10 +12,11 @@
 body.scanner-active{background:transparent!important}
 body.scanner-active .app,body.scanner-active header,body.scanner-active nav,body.scanner-active .toast{display:none}
 :root{
-  --bg:#0f1413; --surface:#161d1c; --surface2:#1e2726; --line:#2a3534;
-  --ink:#e8efe9; --muted:#8b9a96; --accent:#48c78e; --accent-d:#2f9d6e;
-  --danger:#ef6f6f; --warn:#e6b450; --info:#5aa9e6;
-  --radius:16px; --shadow:0 8px 30px rgba(0,0,0,.35);
+  --bg:#f5f6fb; --surface:#ffffff; --surface2:#eef0f8; --line:#dde1f0;
+  --ink:#1a1b2e; --muted:#6b7896; --accent:#2563eb; --accent-d:#1d4ed8;
+  --pink:#c2185b;
+  --danger:#dc2626; --warn:#d97706; --info:#0284c7;
+  --radius:16px; --shadow:0 2px 14px rgba(30,40,100,.09);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:'Spline Sans',system-ui,sans-serif;background:var(--bg);color:var(--ink);
@@ -25,7 +26,7 @@ h1,h2,h3{font-family:'Fraunces',serif;font-weight:600;letter-spacing:-.02em}
 header{padding:22px 20px 14px;position:sticky;top:0;background:linear-gradient(180deg,var(--bg) 70%,transparent);z-index:30}
 header .sub{color:var(--muted);font-size:13px}
 header h1{font-size:26px;margin-top:2px;display:flex;align-items:center;gap:8px}
-.dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--pink);box-shadow:0 0 8px rgba(194,24,91,.35)}
 main{padding:6px 16px 30px}
 .view{display:none;animation:fade .35s ease}
 .view.active{display:block}
@@ -35,7 +36,7 @@ main{padding:6px 16px 30px}
 .stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px}
 .stat .n{font-family:'Fraunces',serif;font-size:30px;font-weight:600;line-height:1}
 .stat .l{color:var(--muted);font-size:12.5px;margin-top:6px}
-.stat.alert{border-color:#5a3838;background:linear-gradient(160deg,#231a1a,var(--surface))}
+.stat.alert{border-color:#fecaca;background:linear-gradient(160deg,#fff5f5,var(--surface))}
 .stat.alert .n{color:var(--danger)}
 .stat.warn .n{color:var(--warn)}
 .stat.good .n{color:var(--accent)}
@@ -43,10 +44,10 @@ label{display:block;font-size:13px;color:var(--muted);margin:14px 0 6px}
 input,select,textarea{width:100%;background:var(--surface2);border:1px solid var(--line);color:var(--ink);
   padding:13px 14px;border-radius:12px;font-size:16px;font-family:inherit;outline:none;transition:border .2s}
 input:focus,select:focus,textarea:focus{border-color:var(--accent)}
-input::placeholder{color:#5d6b67}
+input::placeholder{color:#a0aabe}
 button{cursor:pointer;font-family:inherit;border:none;font-size:15px;font-weight:600;border-radius:12px;transition:transform .1s,opacity .2s}
 button:active{transform:scale(.97)}
-.btn{background:var(--accent);color:#06120c;padding:15px;width:100%;margin-top:18px}
+.btn{background:var(--accent);color:#fff;padding:15px;width:100%;margin-top:18px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn-2{background:var(--surface2);color:var(--ink);border:1px solid var(--line)}
 .btn-sm{padding:9px 14px;font-size:13px;width:auto}
@@ -57,10 +58,10 @@ button:active{transform:scale(.97)}
 .spinner{width:18px;height:18px;border:2.5px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11.5px;font-weight:600}
-.b-ok{background:#12321f;color:var(--accent)} .b-err{background:#3a1d1d;color:var(--danger)}
-.b-wait{background:#322a12;color:var(--warn)} .b-info{background:#13283a;color:var(--info)}
-.b-new{background:#322412;color:var(--warn)}
-.item{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;background:var(--surface2)}
+.b-ok{background:#dbeafe;color:#1d4ed8} .b-err{background:#fee2e2;color:#b91c1c}
+.b-wait{background:#fef3c7;color:#92400e} .b-info{background:#e0f2fe;color:#0369a1}
+.b-new{background:#fce7f3;color:#9d174d}
+.item{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;background:var(--surface)}
 .item .top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
 .item .desc{font-size:13.5px;font-weight:500}
 .item .meta{color:var(--muted);font-size:12px;margin-top:4px}
@@ -69,9 +70,9 @@ button:active{transform:scale(.97)}
 .conv{margin-top:12px;border-top:1px dashed var(--line);padding-top:12px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .chip{background:var(--surface);border:1px solid var(--line);color:var(--muted);padding:7px 12px;font-size:12.5px;font-weight:500;border-radius:20px}
-.chip.on{background:var(--accent);color:#06120c;border-color:var(--accent)}
+.chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 .chip-input{width:64px!important;padding:7px 10px!important;font-size:13px!important;text-align:center;border-radius:20px!important}
-.prev{margin-top:12px;background:#12241b;border:1px solid var(--accent-d);border-radius:10px;padding:10px 12px;font-size:13px}
+.prev{margin-top:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;font-size:13px;color:var(--ink)}
 .prev b{font-family:'Fraunces',serif}
 .row{display:flex;gap:10px}.row>*{flex:1}
 .list-row{display:flex;justify-content:space-between;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)}
@@ -80,9 +81,9 @@ button:active{transform:scale(.97)}
 .list-row .s{color:var(--muted);font-size:12px;margin-top:2px}
 .list-row .v{text-align:right;font-family:'Fraunces',serif;font-weight:600}
 .muted{color:var(--muted)} .small{font-size:12.5px}
-.alertbar{background:#3a1d1d;border:1px solid #5a3838;color:#f0b4b4;padding:12px;border-radius:12px;font-size:13px;margin-bottom:14px}
+.alertbar{background:#fee2e2;border:1px solid #fecaca;color:#b91c1c;padding:12px;border-radius:12px;font-size:13px;margin-bottom:14px}
 .empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px}
-.sec-title{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin:22px 0 10px;font-weight:600}
+.sec-title{font-size:12px;color:var(--pink);text-transform:uppercase;letter-spacing:.1em;margin:22px 0 8px;font-weight:700;padding-left:4px;border-left:3px solid var(--pink)}
 nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--line);display:flex;z-index:40;padding:8px 4px env(safe-area-inset-bottom)}
 nav button{flex:1;background:none;color:var(--muted);padding:8px 2px;font-size:10.5px;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:4px}
 nav button.active{color:var(--accent)}
@@ -91,11 +92,11 @@ nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
 .scanner-wrap.show{display:block}
 .scanner-wrap video{width:100%;display:block}
 .scanner-wrap canvas{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
-.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--line);
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--surface);border:1px solid var(--line);
   color:var(--ink);padding:13px 20px;border-radius:12px;font-size:14px;z-index:100;box-shadow:var(--shadow);opacity:0;transition:opacity .3s;max-width:90%;text-align:center}
 .toast.show{opacity:1}
-.toast.err{border-color:#5a3838;color:#f0b4b4}
-.toast.ok{border-color:var(--accent-d)}
+.toast.err{border-color:#fecaca;color:#b91c1c}
+.toast.ok{border-color:#bfdbfe;color:var(--accent-d)}
 hr{border:none;border-top:1px solid var(--line);margin:16px 0}
 </style>
 </head>
@@ -415,7 +416,7 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <textarea id="treino-est-json" rows="5" placeholder='{"schema_version":"1.0","tipo":"catalogo_revisado_gpt",...}'></textarea>
     <div class="row" style="margin-top:10px">
       <button class="btn-2 btn-sm" style="width:100%;padding:11px" onclick="validarTreino('treino-est-json','treino-est-result')">Validar JSON</button>
-      <button class="btn-2 btn-sm" style="width:100%;padding:11px;background:var(--accent);color:#06120c" onclick="importarTreinoEsteira()">Importar aprendizado</button>
+      <button class="btn-2 btn-sm" style="width:100%;padding:11px;background:var(--accent);color:#fff" onclick="importarTreinoEsteira()">Importar aprendizado</button>
     </div>
     <div id="treino-est-result" style="margin-top:10px"></div>
   </div>
@@ -802,7 +803,7 @@ function pedirTexto(titulo, inicial=''){
       <input id="_pt_in" value="${esc(inicial)}">
       <div class="row" style="margin-top:14px">
         <button class="btn-2 btn-sm" style="padding:11px" id="_pt_cancel">Cancelar</button>
-        <button class="btn-2 btn-sm" style="padding:11px;background:var(--accent);color:#06120c" id="_pt_ok">OK</button>
+        <button class="btn-2 btn-sm" style="padding:11px;background:var(--accent);color:#fff" id="_pt_ok">OK</button>
       </div></div>`;
     document.body.appendChild(ov);
     const inp=ov.querySelector('#_pt_in'); setTimeout(()=>inp.focus(),50);
@@ -827,7 +828,7 @@ async function confirmarImportacao(){
       <p style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:20px">Esta ação vai <b style="color:var(--fg)">alterar quantidades, custo médio e criar contas a pagar</b>. Essa operação não pode ser desfeita facilmente.</p>
       <div class="row">
         <button class="btn-2 btn-sm" style="width:100%;padding:12px" id="_ci_cancel">Cancelar</button>
-        <button class="btn btn-sm" style="width:100%;padding:12px;background:var(--accent);color:#06120c" id="_ci_ok">Confirmar entrada</button>
+        <button class="btn btn-sm" style="width:100%;padding:12px;background:var(--accent);color:#fff" id="_ci_ok">Confirmar entrada</button>
       </div></div>`;
     document.body.appendChild(ov);
     ov.querySelector('#_ci_cancel').onclick=()=>{ ov.remove(); resolve(false); };
@@ -1692,7 +1693,7 @@ async function loadContas(){
       if(isNaN(v)) return {k:'pend',badge:'<span class="badge b-wait">sem data</span>'};
       v.setHours(0,0,0,0);
       if(v<hoje) return {k:'venc',badge:'<span class="badge b-err">vencida</span>'};
-      if(v.getTime()===hoje.getTime()) return {k:'hoje',badge:'<span class="badge b-warn" style="background:#322a12;color:var(--warn)">vence hoje</span>'};
+      if(v.getTime()===hoje.getTime()) return {k:'hoje',badge:'<span class="badge b-wait">vence hoje</span>'};
       const d7=new Date(hoje); d7.setDate(d7.getDate()+7);
       if(v<=d7) return {k:'7',badge:'<span class="badge b-info">7 dias</span>'};
       return {k:'fut',badge:''};

@@ -215,13 +215,6 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <label>Observações</label>
     <input id="prod-obs" placeholder="opcional">
 
-    <label>Produto de teste</label>
-    <p class="muted small" style="margin-bottom:6px">Produtos de teste não vão ao ChatGPT nem reconhecem NF-es.</p>
-    <select id="prod-teste">
-      <option value="NAO">NÃO — produto real</option>
-      <option value="SIM">SIM — produto de teste</option>
-    </select>
-
     <button class="btn" style="margin-top:22px;width:100%;padding:15px;font-size:15px" onclick="salvarProduto()">Salvar alterações</button>
     <button id="btn-reativar-prod" class="btn" style="display:none;margin-top:10px;width:100%;padding:15px;font-size:15px;background:#2e7d32;border-color:#2e7d32" onclick="reativarProduto()">✅ Reativar produto</button>
   </div>
@@ -1019,7 +1012,6 @@ async function abrirProduto(id){
   document.getElementById('prod-preco').value=prod.preco_venda||'';
   document.getElementById('prod-minimo').value=prod.estoque_minimo||'';
   document.getElementById('prod-obs').value=prod.observacoes||'';
-  document.getElementById('prod-teste').value=String(prod.produto_teste||'NAO').toUpperCase()==='SIM'?'SIM':'NAO';
 
   // Status badge
   const s=statusCadastro(prod);
@@ -1238,7 +1230,6 @@ async function salvarProduto(){
     preco_venda:parseFloat(document.getElementById('prod-preco').value)||0,
     estoque_minimo:parseFloat(document.getElementById('prod-minimo').value)||0,
     observacoes:document.getElementById('prod-obs').value.trim(),
-    produto_teste:document.getElementById('prod-teste').value,
   };
   if(!payload.nome_interno){ toast('Informe o nome do produto.','err'); return; }
   try{

@@ -414,6 +414,16 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
   <div id="contas-list"><div class="empty">Carregando…</div></div>
 </section>
 
+<!-- AUDITORIA DO CADASTRO -->
+<section class="view" id="v-auditoria">
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+    <button class="btn-2 btn-sm" onclick="nav('config')">← Voltar</button>
+    <div class="sec-title" style="margin:0">Auditoria do Cadastro</div>
+  </div>
+  <div id="auditoria-content"><div class="empty muted small">Clique em Analisar para verificar inconsistências.</div></div>
+  <button class="btn" style="width:100%;padding:13px;margin-top:10px" onclick="loadAuditoria()">⚙ Analisar agora</button>
+</section>
+
 <!-- CONFIGURAÇÕES -->
 <section class="view" id="v-config">
   <div class="sec-title">Categorias</div>
@@ -448,6 +458,7 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
   <div class="card">
     <button class="btn-2" style="width:100%;padding:12px" onclick="rodarDiagnostico()">⚙ Testar configuração</button>
     <div id="diag-result"></div>
+    <button class="btn-2" style="width:100%;padding:12px;margin-top:8px" onclick="nav('auditoria')">🔍 Auditoria do Cadastro</button>
   </div>
 </section>
 
@@ -502,7 +513,8 @@ function fmtDataHora(s){
 const hojeISO = () => { const d=new Date(); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; };
 const TITLES = {dash:['Painel','Visão geral'],import:['Entrada de NF-e','Confirmar compra'],treino:['Esteira de Treinamento','Treinar produtos'],conf:['Conferência','Revisar antes de lançar'],
   estoque:['Estoque','Produtos'],produto:['Produto','Editar cadastro'],entrada:['Entrada manual','Sem nota fiscal'],saida:['Saída','Baixa de estoque'],
-  inv:['Inventário','Contagem'],contas:['Contas a pagar','Financeiro'],config:['Configurações','Ajustes e categorias']};
+  inv:['Inventário','Contagem'],contas:['Contas a pagar','Financeiro'],config:['Configurações','Ajustes e categorias'],
+  auditoria:['Auditoria do Cadastro','Detectar inconsistências']};
 
 function nav(v){
   _stopActiveScan();
@@ -517,6 +529,7 @@ function nav(v){
   if(v==='saida') loadSaida();
   if(v==='entrada') loadEntrada();
   if(v==='config') loadConfig();
+  if(v==='auditoria') loadAuditoria();
   window.scrollTo(0,0);
 }
 
@@ -659,7 +672,7 @@ function renderConferencia(){
       + `<input class="chip-input" value="${esc(u)}" onchange="setUnidade(${i},this.value)">`;
     html += `<div class="item">
       <div class="top"><div class="desc">${it.descricao_original}</div>
-        ${novo?'<span class="badge b-new">NOVO</span>':'<span class="badge b-ok">cadastrado</span>'}</div>
+        ${novo?'<span class="badge b-new">NOVO</span>':`<span class="badge b-ok">cadastrado</span>${it.metodo_reconhecimento?`<span class="muted" style="font-size:10px;margin-left:6px">${esc(it.metodo_reconhecimento)}</span>`:''}`}</div>
       <div class="meta">Comprado: ${arred(it.quantidade_nf)} ${it.unidade_nf||''}${it.codigo_barras?' · EAN '+it.codigo_barras:''}</div>
       <div class="conv">
         <div class="chips">
@@ -779,6 +792,11 @@ function pedirTexto(titulo, inicial=''){
   });
 }
 async function confirmarImportacao(){
+  const semCat = (confData?.itens||[]).filter(it=>it.produto_novo && !it.categoria_id);
+  if(semCat.length>0){
+    toast(`${semCat.length} item(ns) novo(s) sem categoria. Preencha antes de confirmar.`,'err');
+    return;
+  }
   const ok = await new Promise(resolve=>{
     const ov=document.createElement('div');
     ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;padding:24px';
@@ -1595,6 +1613,34 @@ function rotuloConfig(k){
     MAX_TENTATIVAS_NFE:'Máx. tentativas por NF-e',
     INTERVALO_TENTATIVAS_MS:'Intervalo entre tentativas (ms)',LIMITE_CONSULTAS_SEGUNDO:'Consultas por segundo'}[k]||k;
 }
+async function loadAuditoria(){
+  const el = document.getElementById('auditoria-content');
+  el.innerHTML = '<div class="muted small">Analisando…</div>';
+  try{
+    const r = await api('/api/admin?recurso=auditoria-cadastro');
+    const s = r.stats;
+    const tipoBadge = {
+      sem_categoria: '<span class="badge b-err">sem categoria</span>',
+      sem_mapeamento: '<span class="badge b-wait">sem mapeamento</span>',
+      sem_embalagem: '<span class="badge b-wait">sem embalagem</span>',
+      cnpj_codigo_duplicado: '<span class="badge b-err">CNPJ+cód duplicado</span>',
+      alias_produto_invalido: '<span class="badge b-err">alias órfão</span>',
+    };
+    const statsHtml = `<div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:14px">
+      <div class="stat ${s.sem_categoria>0?'alert':'good'}"><div class="n">${s.sem_categoria}</div><div class="l">sem categoria</div></div>
+      <div class="stat ${s.sem_mapeamento>0?'warn':'good'}"><div class="n">${s.sem_mapeamento}</div><div class="l">sem mapeamento</div></div>
+      <div class="stat ${s.sem_embalagem>0?'warn':'good'}"><div class="n">${s.sem_embalagem}</div><div class="l">sem embalagem</div></div>
+      <div class="stat ${s.cnpj_codigo_duplicado>0?'alert':'good'}"><div class="n">${s.cnpj_codigo_duplicado}</div><div class="l">CNPJ+cód dup.</div></div>
+      <div class="stat ${s.alias_produto_invalido>0?'warn':'good'}"><div class="n">${s.alias_produto_invalido}</div><div class="l">alias órfão</div></div>
+    </div>`;
+    const alertasHtml = r.alertas.length
+      ? r.alertas.map(a=>`<div class="list-row"><div><div class="t">${tipoBadge[a.tipo]||a.tipo} ${esc(a.nome_interno||a.nome_a||a.alias||'')}</div>
+          <div class="s">${esc(a.detalhe||a.motivo||a.chave_duplicada||'')}</div></div></div>`).join('')
+      : '<div class="muted small">Nenhuma inconsistência encontrada ✓</div>';
+    el.innerHTML = `<p class="muted small" style="margin-bottom:10px">${s.total_produtos_ativos} produtos ativos analisados.</p>${statsHtml}<div>${alertasHtml}</div>`;
+  }catch(e){ el.innerHTML=`<div class="empty">${e.message}</div>`; }
+}
+
 async function loadConfig(){
   try{
     catCache = (await api('/api/admin?recurso=categorias')).rows;
@@ -1744,15 +1790,16 @@ Vou enviar o contexto atual do sistema e os produtos desconhecidos acumulados da
 
 Analise os produtos, agrupe repetidos, identifique produtos já conhecidos, sugira nomes internos limpos, categorias, unidades de estoque, embalagens, aliases e mapeamentos fornecedor/produto.
 
-Use sempre CNPJ do fornecedor + código do produto da NF-e como chave principal.
-
-Não invente CNPJ, código de produto, EAN, fornecedor, preço, quantidade por caixa, fardo, pacote, barril ou embalagem.
+REGRAS OBRIGATÓRIAS:
+1. Use sempre CNPJ do fornecedor + código do produto da NF-e como chave principal.
+2. Não invente CNPJ, código de produto, EAN, fornecedor, preço, quantidade por caixa, fardo, pacote, barril ou embalagem.
+3. Use SEMPRE o campo "nome_interno" em todos os arrays (produtos_confirmados, embalagens_confirmadas, mapeamentos_confirmados, aliases_confirmados). NUNCA use "produto_interno" — esse campo é ignorado pelo importador.
+4. Em "categoria_id", use APENAS IDs que existam no contexto recebido. Se não souber o ID, use o campo "categoria" com o nome em texto — o sistema criará automaticamente. Nunca invente um ID.
+5. Se o produto já existir no contexto (produtos_internos), use seu id_produto e nome_interno exatos.
 
 Se faltar informação importante, pergunte antes de gerar o JSON final.
 
 Se as informações forem suficientes, gere o JSON final válido para importação no Super Ajudante.
-
-Use o restaurante como Araçá Grill.
 
 O JSON final deve seguir este formato:
 
@@ -1762,10 +1809,18 @@ O JSON final deve seguir este formato:
   "origem": "chatgpt",
   "restaurante": "Araçá Grill",
   "gerado_em": "DD/MM/AAAA HH:mm",
-  "produtos_confirmados": [],
-  "embalagens_confirmadas": [],
-  "mapeamentos_confirmados": [],
-  "aliases_confirmados": [],
+  "produtos_confirmados": [
+    { "nome_interno": "Nome limpo em PT", "categoria": "Categoria existente", "unidade_estoque": "KG", "cnpj_fornecedor": "00000000000000", "codigo_produto_nf": "123" }
+  ],
+  "embalagens_confirmadas": [
+    { "nome_interno": "Nome limpo em PT", "descricao": "Fardo 15 KG", "sigla": "FD15", "fator": 15, "unidade_base": "KG" }
+  ],
+  "mapeamentos_confirmados": [
+    { "nome_interno": "Nome limpo em PT", "cnpj_fornecedor": "00000000000000", "codigo_produto_nf": "123" }
+  ],
+  "aliases_confirmados": [
+    { "nome_interno": "Nome limpo em PT", "alias": "DESCRICAO ORIGINAL DA NF" }
+  ],
   "itens_com_duvida": [],
   "observacoes": []
 }

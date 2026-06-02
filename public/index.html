@@ -2008,61 +2008,182 @@ async function adicionarNaEsteira(){
 }
 
 function montarTextoPacote(pacote){
-  const comando=`Você é o Treinador de Notas do sistema Super Ajudante Estoque do Araçá Grill.
+  const ctx=pacote.contexto||{};
+  const cats=(ctx.categorias||[]);
+  const amostra=(ctx.produtos_confirmados_amostra||[]);
 
-Vou enviar o contexto atual do sistema e os produtos desconhecidos acumulados da Esteira de Treinamento de NF-e.
+  const catsBloco=cats.length
+    ?cats.map(c=>{
+        const subs=(c.subcategorias||[]).length
+          ?`\n    Subcategorias: ${c.subcategorias.join(' | ')}`:'';
+        return`  • ${c.nome_categoria}${subs}`;
+      }).join('\n')
+    :'  (nenhuma categoria cadastrada ainda)';
 
-Analise os produtos, agrupe repetidos, identifique produtos já conhecidos, sugira nomes internos limpos, categorias, unidades de estoque, embalagens, aliases e mapeamentos fornecedor/produto.
+  const amBloco=amostra.length
+    ?amostra.map(p=>{
+        const catNome=cats.find(c=>c.id_categoria===p.categoria_id)?.nome_categoria||'';
+        const sub=p.subcategoria?` > ${p.subcategoria}`:'';
+        return`  • ${p.nome_interno} [${catNome}${sub}] (${p.unidade_estoque})`;
+      }).join('\n')
+    :'  (nenhum produto confirmado ainda — seja conservador com a nomenclatura)';
 
-REGRAS OBRIGATÓRIAS:
-1. Use sempre CNPJ do fornecedor + código do produto da NF-e como chave principal.
-2. Não invente CNPJ, código de produto, EAN, fornecedor, preço, quantidade por caixa, fardo, pacote, barril ou embalagem.
-3. Use SEMPRE o campo "nome_interno" em todos os arrays (produtos_confirmados, embalagens_confirmadas, mapeamentos_confirmados, aliases_confirmados). NUNCA use "produto_interno" — esse campo é ignorado pelo importador.
-4. Em "categoria_id", use APENAS IDs que existam no contexto recebido. Se não souber o ID, use o campo "categoria" com o nome em texto — o sistema criará automaticamente. Nunca invente um ID.
-5. Se o produto já existir no contexto (produtos_internos), use seu id_produto e nome_interno exatos.
+  const avisoEsteira=(!pacote.tem_esteira&&pacote.desconhecidos?.aviso)
+    ?`\n⚠ AVISO: ${pacote.desconhecidos.aviso}\n`:'\n';
 
-Se faltar informação importante, pergunte antes de gerar o JSON final.
-
-Se as informações forem suficientes, gere o JSON final válido para importação no Super Ajudante.
-
-O JSON final deve seguir este formato:
-
-{
-  "schema_version": "1.0",
-  "tipo": "catalogo_revisado_gpt",
-  "origem": "chatgpt",
-  "restaurante": "Araçá Grill",
-  "gerado_em": "DD/MM/AAAA HH:mm",
-  "produtos_confirmados": [
-    { "nome_interno": "Nome limpo em PT", "categoria": "Categoria existente", "unidade_estoque": "KG", "cnpj_fornecedor": "00000000000000", "codigo_produto_nf": "123" }
-  ],
-  "embalagens_confirmadas": [
-    { "nome_interno": "Nome limpo em PT", "descricao": "Fardo 15 KG", "sigla": "FD15", "fator": 15, "unidade_base": "KG" }
-  ],
-  "mapeamentos_confirmados": [
-    { "nome_interno": "Nome limpo em PT", "cnpj_fornecedor": "00000000000000", "codigo_produto_nf": "123" }
-  ],
-  "aliases_confirmados": [
-    { "nome_interno": "Nome limpo em PT", "alias": "DESCRICAO ORIGINAL DA NF" }
-  ],
-  "itens_com_duvida": [],
-  "observacoes": []
-}
-
-Quando houver dúvida importante, não gere JSON final ainda. Faça perguntas em lote.`;
-
-  let aviso='';
-  if(!pacote.tem_esteira&&pacote.desconhecidos?.aviso){
-    aviso=`\n\nAVISO: ${pacote.desconhecidos.aviso}`;
-  }
-  return `=== COMANDO PARA O CHATGPT ===${aviso}
-${comando}
-
-=== CONTEXTO DO SUPER AJUDANTE ===
-${JSON.stringify(pacote.contexto,null,2)}
-
-=== PRODUTOS DESCONHECIDOS DA ESTEIRA ===
-${JSON.stringify(pacote.desconhecidos,null,2)}`;
+  const linhas=[
+    '╔══════════════════════════════════════════════════════╗',
+    '║  ASSISTENTE DE CATÁLOGO — SUPER AJUDANTE ESTOQUE    ║',
+    '║  Araçá Grill                                         ║',
+    '╚══════════════════════════════════════════════════════╝',
+    avisoEsteira,
+    '━━━ [1] IDENTIDADE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    'Você é o Assistente de Catálogo do Super Ajudante Estoque do Araçá Grill.',
+    'Sua única função nesta sessão: analisar os produtos desconhecidos de NF-e,',
+    'identificar cada produto corretamente e retornar um JSON válido para importação.',
+    '',
+    '━━━ [2] O QUE VOCÊ PODE FAZER ━━━━━━━━━━━━━━━━━━━━━━━━',
+    '✅ Pesquisar na internet por EAN, nome do produto ou fabricante para confirmar',
+    '   o nome comercial correto de um produto que você não reconheça.',
+    '✅ Usar a lista de produtos já cadastrados como referência de nomenclatura.',
+    '✅ Criar uma subcategoria nova se nenhuma das existentes servir.',
+    '✅ Criar uma categoria nova se nenhuma das existentes servir (use com critério).',
+    '✅ Perguntar em lote quando faltar informação crítica antes de gerar o JSON.',
+    '✅ Agrupar itens repetidos (mesmo fornecedor e código) em um único produto.',
+    '',
+    '━━━ [3] O QUE VOCÊ NÃO PODE FAZER ━━━━━━━━━━━━━━━━━━━━',
+    '❌ Inventar CNPJ, EAN, código do produto ou preço de custo.',
+    '❌ Inventar fator de embalagem sem evidência explícita na descrição da NF-e.',
+    '❌ Usar a descrição bruta da NF-e como nome_interno (sempre limpar o nome).',
+    '❌ Criar fichas técnicas ou insumos para pratos, porções ou lanches.',
+    '❌ Vincular produto de estoque a produto de venda do cardápio.',
+    '❌ Usar preço de venda para inferir custo ou quantidade de estoque.',
+    '',
+    '━━━ [4] REGRAS DE NOMENCLATURA ━━━━━━━━━━━━━━━━━━━━━━━',
+    'O campo "nome_interno" deve ser um nome limpo, em português, que qualquer',
+    'funcionário do Araçá Grill entenda. Siga esta ordem de prioridade:',
+    '  1. Nome comercial + marca   (ex: Azeite Gallo, Cerveja Heineken)',
+    '  2. Tipo / apresentação      (ex: Extra Virgem, Pilsen, Garrafa, Lata)',
+    '  3. Volume ou peso unitário  (ex: 500ml, 1L, 5kg)',
+    '  4. NÃO use abreviações da NF-e (CERV, PIL, GFA, AZT, etc.)',
+    '  5. NÃO repita fornecedor ou código no nome_interno',
+    '',
+    'Exemplos corretos:',
+    '  NF-e: "AZTE OLIVA GALLO EVIRG 500ML"  →  Azeite Gallo Extra Virgem 500ml',
+    '  NF-e: "CERV HEINEKEN PIL 0.600 GFA"   →  Cerveja Heineken Garrafa 600ml',
+    '  NF-e: "ARROZ TIPO 1 TIÃO JOÃO 5KG"   →  Arroz Tio João Tipo 1 5kg',
+    '  NF-e: "KETCHUP SACHE 8CXC192UN"       →  Sachê de Ketchup [Marca]',
+    '',
+    '━━━ [5] EMBALAGENS E FATORES ━━━━━━━━━━━━━━━━━━━━━━━━',
+    'A unidade_estoque é sempre a unidade mínima controlada (KG, UN, L, ML).',
+    'O fator é quantas unidades de estoque há em cada embalagem de compra.',
+    '',
+    'Padrões que você pode confirmar com confianca ALTA:',
+    '  CX24, CX12, CX6  → caixa com N unidades  (unidade_base: UN, fator: N)',
+    '  6X5KG, 4X1,8KG   → fardo: fator = N×M    (ex: 6×5 = fator 30, base KG)',
+    '  DZ                → dúzia, fator 12',
+    '  GFA               → garrafa unitária, fator 1',
+    '',
+    'Padrões que exigem confianca MEDIA ou dúvida:',
+    '  FD ou FARDO sem número → marque MEDIA, pergunte o fator',
+    '  PAC6, PCT6             → pacote com 6, mas KG total? Verifique na descrição',
+    '  CX 6,8KG               → peso total da caixa ou peso unitário? Marque dúvida',
+    '  8CXC192UN              → 8 caixas × 192 un = 1.536? Marque dúvida',
+    '',
+    '━━━ [6] PRODUTOS VENDIDOS POR KG ━━━━━━━━━━━━━━━━━━━━',
+    'Quando a unidade_estoque for KG, extraia o peso UNITÁRIO da embalagem da descrição:',
+    '  "ARROZ TIPO 1 5KG"          → embalagem: Pacote 5kg (fator 5, base KG)',
+    '  "FRANGO INTEIRO CX 15KG"    → é 1 frango ~15kg OU caixa com vários? → dúvida',
+    '  "QUEIJO MUSSARELA PEÇA ~3KG"→ peso variável: fator null, confianca MEDIA',
+    '  "PIMENTA DO REINO 4X1,8KG" → fardo 4 potes × 1,8kg = fator 7.2, base KG',
+    '  "OLEO SOJA 6X900ML"         → fardo 6 garrafas × 900ml, fator 5400, base ML',
+    '',
+    'Para peso variável (~, aprox.): fator: null, confianca: "MEDIA".',
+    'Para produtos a granel (sacas, kg solto): unidade_estoque KG, fator 1.',
+    '',
+    '━━━ [7] PESQUISA NA INTERNET ━━━━━━━━━━━━━━━━━━━━━━━━',
+    'Pesquise quando:',
+    '  a) O nome da NF-e for ambíguo ou muito abreviado e você não reconhecer.',
+    '  b) O EAN estiver presente e você quiser confirmar o produto exato.',
+    '  c) Não souber a apresentação (lata? garrafa? sachê? pote?).',
+    '',
+    'Como pesquisar:',
+    '  • Busque o EAN no Open Food Facts, Cosmos, Barcodelookup ou Google.',
+    '  • Busque "[fabricante] [descrição parcial]" no Google.',
+    '  • Verifique o site do fabricante ou de grandes distribuidoras.',
+    '',
+    'A pesquisa confirma: nome comercial, marca, tipo, volume/peso, apresentação.',
+    'A pesquisa NUNCA confirma: fator de embalagem NF-e, preço de custo.',
+    'Registre a fonte: "fonte_auxiliar": "Open Food Facts — EAN 7896045503852"',
+    '',
+    '━━━ [8] NÍVEL DE CONFIANÇA (obrigatório em todos) ━━━━',
+    'ALTA  → Importação automática (nome claro + categoria certa + fator explícito na NF-e)',
+    'MEDIA → Fila de revisão (embalagem deduzida, categoria inferida, ou pesquisa web usada)',
+    'BAIXA → Bloqueado até revisão manual (nome ambíguo, fator desconhecido, etc.)',
+    '',
+    '━━━ [9] CATEGORIAS E SUBCATEGORIAS DO SISTEMA ━━━━━━━━',
+    'Use SOMENTE as categorias e subcategorias listadas abaixo.',
+    'Crie nova subcategoria/categoria apenas se NENHUMA das existentes servir.',
+    '',
+    catsBloco,
+    '',
+    '━━━ [10] PRODUTOS JÁ CADASTRADOS (amostra para referência) ━━',
+    'Use como referência de nomenclatura e para evitar duplicações:',
+    '',
+    amBloco,
+    '',
+    '━━━ [11] PRODUTOS DESCONHECIDOS DESTA ESTEIRA ━━━━━━━━',
+    JSON.stringify(pacote.desconhecidos,null,2),
+    '',
+    '━━━ [12] FORMATO DE SAÍDA ━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+    'Gere APENAS o JSON abaixo, sem texto antes ou depois.',
+    'Todos os arrays em ordem alfabética pelo campo "nome_interno".',
+    '',
+    JSON.stringify({
+      schema_version:'1.1',tipo:'catalogo_revisado_gpt',origem:'chatgpt',
+      restaurante:'Araçá Grill',gerado_em:'DD/MM/AAAA HH:mm',
+      produtos_confirmados:[{
+        nome_interno:'Nome limpo em português',
+        descricao_original_nfe:'DESCRICAO COMO VEIO NA NF-e',
+        categoria:'Nome da categoria existente',
+        subcategoria:'Nome da subcategoria (existente ou nova)',
+        unidade_estoque:'KG|UN|L|ML',
+        cnpj_fornecedor:'00000000000000',
+        codigo_produto_nf:'codigo',
+        ean:'codigo de barras (se souber)',
+        confianca:'ALTA|MEDIA|BAIXA',
+        confianca_motivo:'Explique brevemente',
+        fonte_auxiliar:'Open Food Facts | Google | null',
+      }],
+      embalagens_confirmadas:[{
+        nome_interno:'Nome limpo do produto',
+        descricao:'Caixa 24 unidades',sigla:'CX24',fator:24,unidade_base:'UN',
+        confianca:'ALTA|MEDIA|BAIXA',
+      }],
+      mapeamentos_confirmados:[{
+        nome_interno:'Nome limpo do produto',
+        cnpj_fornecedor:'00000000000000',codigo_produto_nf:'codigo',
+      }],
+      aliases_confirmados:[{
+        nome_interno:'Nome limpo do produto',
+        alias:'DESCRICAO ORIGINAL DA NF-e',
+      }],
+      itens_com_duvida:[{
+        descricao_original_nfe:'DESCRICAO COMO VEIO NA NF-e',
+        sugestao_nome:'Minha melhor sugestão',
+        sugestao_categoria:'Categoria sugerida',
+        sugestao_subcategoria:'Subcategoria sugerida',
+        confianca:'BAIXA',confianca_motivo:'O que falta ou é ambíguo',
+      }],
+      observacoes:['Notas gerais, dúvidas não críticas ou alertas ao operador'],
+    },null,2),
+    '',
+    'IMPORTANTE:',
+    '• Se faltar informação crítica em múltiplos itens, PERGUNTE TUDO EM UM ÚNICO BLOCO antes do JSON.',
+    '• Nunca gere JSON parcial — ou você tem dados suficientes e gera completo, ou pergunta antes.',
+    '• Produtos com mesmo código + fornecedor devem aparecer UMA ÚNICA VEZ.',
+  ];
+  return linhas.join('\n');
 }
 
 async function copiarPacoteCompleto(){

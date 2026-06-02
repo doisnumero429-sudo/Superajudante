@@ -445,6 +445,22 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     </div>
   </div>
 
+  <!-- Backup e Restauração -->
+  <div class="sec-title">Backup e Restauração</div>
+  <div class="card">
+    <p class="muted small" style="margin-bottom:12px">Baixe o banco completo, envie para o Claude (ou outro AI) para revisão e evolução dos dados. O arquivo já vem com instruções embutidas. Depois use <b>☢️ Apagar TUDO</b> e importe o arquivo corrigido.</p>
+    <button class="btn" style="width:100%;padding:14px;font-size:15px;margin-bottom:10px" onclick="baixarBackupCompleto()">💾 Baixar backup completo (.json)</button>
+    <p class="muted small" style="margin:10px 0 6px;font-weight:600;color:var(--ink)">Restaurar backup</p>
+    <p class="muted small" style="margin-bottom:8px">Cole o JSON revisado ou selecione o arquivo. Use <b>☢️ Apagar TUDO</b> antes para garantir banco limpo.</p>
+    <input type="file" id="backup-file" accept=".json" onchange="lerArquivoBackup()" style="width:100%;margin-bottom:8px;font-size:13px">
+    <textarea id="backup-json" rows="4" placeholder='{"schema_version":"backup_1.0","tabelas":{...}}'></textarea>
+    <div class="row" style="margin-top:10px;gap:8px">
+      <button class="btn-2 btn-sm" style="width:100%;padding:11px" onclick="validarBackup()">Validar backup</button>
+      <button class="btn-2 btn-sm" style="width:100%;padding:11px;background:var(--accent);color:#fff" onclick="importarBackup()">Importar backup</button>
+    </div>
+    <div id="backup-result" class="muted small" style="margin-top:10px;white-space:pre-wrap"></div>
+  </div>
+
   <div class="card" style="background:rgba(255,180,0,.05);border-color:rgba(255,180,0,.2)">
     <p class="muted small" style="margin-bottom:8px">⚠ Precisa confirmar uma compra real no estoque?</p>
     <button class="btn-2" style="width:100%;padding:12px" onclick="nav('import')">📦 Ir para Entrada de NF-e →</button>
@@ -2410,6 +2426,68 @@ async function exportarDesconhecidos(boxId='treino-export'){
     if(box) box.innerHTML = `✓ ${d.resumo.produtos_desconhecidos} produtos desconhecidos (de ${d.resumo.produtos_unicos} únicos) gerados e copiados.`;
   }catch(e){ if(box) box.textContent=e.message; }
 }
+// ---------- BACKUP E RESTAURAÇÃO ----------
+async function baixarBackupCompleto(){
+  try{
+    toast('Gerando backup completo…','');
+    const dados=await api('/api/admin?recurso=exportar-banco');
+    const txt=JSON.stringify(dados,null,2);
+    const nome='backup_superajudante_'+new Date().toISOString().slice(0,10)+'.json';
+    const blob=new Blob([txt],{type:'application/json;charset=utf-8'});
+    const file=new File([blob],nome,{type:'application/json'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({title:'Backup Super Ajudante — Araçá Grill',files:[file]});
+    }else{
+      const a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download=nome;
+      a.click();
+    }
+    const r=dados.resumo||{};
+    toast(`Backup gerado ✓ — ${r.total_produtos||0} produtos, ${r.sem_subcategoria||0} sem subcategoria`,'ok');
+  }catch(e){toast(e.message,'err');}
+}
+
+function lerArquivoBackup(){
+  const file=document.getElementById('backup-file').files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{document.getElementById('backup-json').value=e.target.result;};
+  reader.readAsText(file,'utf-8');
+}
+
+function validarBackup(){
+  const txt=document.getElementById('backup-json').value.trim();
+  const box=document.getElementById('backup-result');
+  if(!txt){toast('Cole o JSON ou selecione o arquivo primeiro.','err');return;}
+  try{
+    const j=JSON.parse(txt);
+    if(j.schema_version!=='backup_1.0'){box.textContent='❌ Não é um backup válido (schema_version incorreto).';return;}
+    const tabs=j.tabelas||{};
+    const linhas=Object.entries(tabs).map(([k,v])=>`  ${k}: ${Array.isArray(v)?v.length:0} registros`);
+    box.textContent='✅ Backup válido!\n'+linhas.join('\n');
+    toast('Backup válido ✓','ok');
+  }catch(e){box.textContent='❌ JSON inválido: '+e.message;toast('JSON inválido','err');}
+}
+
+async function importarBackup(){
+  const txt=document.getElementById('backup-json').value.trim();
+  const box=document.getElementById('backup-result');
+  if(!txt){toast('Cole o JSON ou selecione o arquivo primeiro.','err');return;}
+  let j;
+  try{j=JSON.parse(txt);}catch(e){toast('JSON inválido: '+e.message,'err');return;}
+  if(j.schema_version!=='backup_1.0'){toast('Arquivo não é um backup válido.','err');return;}
+  if(!confirm('Importar backup?\n\nOs dados serão ADICIONADOS ao banco atual.\nSe quiser substituir tudo, use primeiro "☢️ Apagar TUDO" e depois importe.\n\nContinuar?'))return;
+  try{
+    box.textContent='Importando…';
+    const r=await api('/api/admin?recurso=importar-banco',{method:'POST',body:JSON.stringify({json:txt,limpar_antes:false})});
+    const linhas=Object.entries(r.relatorio||{}).map(([k,v])=>`  ${k}: ${v}`);
+    box.textContent='✅ Importado!\n'+linhas.join('\n');
+    toast('Backup importado ✓','ok');
+  }catch(e){box.textContent='❌ '+e.message;toast(e.message,'err');}
+}
+// ---------- FIM BACKUP ----------
+
 function copiarComandoGPT(){
   const comando = `Você é um assistente de cadastro de produtos de restaurante.
 Vou te enviar dois JSON do meu sistema "Super Ajudante":

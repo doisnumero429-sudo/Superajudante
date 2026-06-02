@@ -61,6 +61,8 @@ export default async function handler(req, res) {
     if (recurso === 'auditoria-cadastro') return await auditoriaCadastro(req, res);
     if (recurso === 'produto-historico') return await produtoHistorico(req, res);
     if (recurso === 'movimentacao-detalhe') return await movimentacaoDetalhe(req, res);
+    if (recurso === 'exportar-banco') return await exportarBanco(req, res);
+    if (recurso === 'importar-banco') return await importarBanco(req, res);
     return json(res, 400, { erro: 'Recurso invalido.' });
   } catch (e) {
     return json(res, 500, { erro: e.message });
@@ -1177,4 +1179,158 @@ async function movimentacaoDetalhe(req, res) {
     nota: nota ? { numero_nota: nota.numero_nota, data_emissao: nota.data_emissao, valor_total_nota: nota.valor_total_nota, chave_nfe: nota.chave_nfe } : null,
     fornecedor: fornecedor ? { razao_social: fornecedor.razao_social, cnpj: fornecedor.cnpj } : null,
   });
+}
+
+// ---------- BACKUP: EXPORTAR BANCO COMPLETO ----------
+async function exportarBanco(req, res) {
+  if (req.method !== 'GET') return json(res, 405, { erro: 'GET only' });
+
+  const [categorias, fornecedores, configuracoes, produtos, embalagens, aliases, prodForn, notas, itensNota, movs] = await Promise.all([
+    readRows('Categorias').catch(() => []),
+    readRows('Fornecedores').catch(() => []),
+    readRows('Configuracoes').catch(() => []),
+    readRows('Produtos').catch(() => []),
+    readRows('Embalagens').catch(() => []),
+    readRows('Aliases_Produto').catch(() => []),
+    readRows('Produto_Fornecedor').catch(() => []),
+    readRows('Notas_Fiscais').catch(() => []),
+    readRows('Itens_Nota').catch(() => []),
+    readRows('Movimentacoes_Estoque').catch(() => []),
+  ]);
+
+  const semSubcat = produtos.filter((p) => !String(p.subcategoria || '').trim() && String(p.ativo || 'SIM').toUpperCase() === 'SIM').length;
+  const semVariante = produtos.filter((p) => !String(p.variante || '').trim() && String(p.ativo || 'SIM').toUpperCase() === 'SIM').length;
+  const semCategoria = produtos.filter((p) => !String(p.categoria_id || '').trim() && String(p.ativo || 'SIM').toUpperCase() === 'SIM').length;
+  const naoConfirmados = produtos.filter((p) => String(p.confirmado || 'NAO').toUpperCase() !== 'SIM' && String(p.ativo || 'SIM').toUpperCase() === 'SIM').length;
+
+  return json(res, 200, {
+    schema_version: 'backup_1.0',
+    exportado_em: nowStr(),
+    restaurante: 'Araçá Grill',
+    sistema: 'Super Ajudante Estoque',
+
+    instrucoes_para_ia: {
+      mensagem: 'Olá! Este arquivo é o backup completo do banco de dados do Super Ajudante Estoque do Araçá Grill. Você deve revisar e evoluir os dados, principalmente a tabela Produtos, e devolver o arquivo completo no mesmo formato.',
+      prioridades: [
+        '1. PREENCHER subcategoria vazia em tabelas.Produtos (campo obrigatório — ' + semSubcat + ' produtos sem subcategoria)',
+        '2. PREENCHER variante vazia quando o produto tiver variações relevantes (embalagem, tamanho) — ' + semVariante + ' produtos sem variante',
+        '3. CORRIGIR nome_interno com abreviações sujas da NF-e (ex: "CERV PIL 600 GFA" → "Cerveja Pilsen Garrafa 600ml")',
+        '4. VERIFICAR categoria_id: se o produto estiver em categoria errada, corrija usando os ids de tabelas.Categorias',
+        '5. CONFIRMAR produtos não confirmados (confirmado = "NAO") — ' + naoConfirmados + ' produtos pendentes',
+      ],
+      campos_que_voce_pode_melhorar_em_Produtos: [
+        'nome_interno — nome limpo e legível em português, que qualquer funcionário entenda',
+        'subcategoria — segundo nível de classificação (ex: Cervejas, Queijos, Aves)',
+        'variante — terceiro nível: diferencia embalagens (ex: Lata 350ml, Garrafa 600ml, Galão 20L)',
+        'categoria_id — use os ids exatos de tabelas.Categorias',
+        'confirmado — mude para "SIM" se o produto estiver correto',
+        'observacoes — adicione informações úteis sobre o produto',
+      ],
+      campos_que_voce_NAO_deve_alterar: [
+        'id_produto, estoque_atual, estoque_minimo, custo_medio, ultimo_custo_unitario',
+        'criado_em, atualizado_em, cnpj_fornecedor, codigo_produto_nf, codigo_barras',
+        'Qualquer linha de tabelas.Movimentacoes_Estoque',
+        'Qualquer linha de tabelas.Notas_Fiscais',
+        'Qualquer linha de tabelas.Itens_Nota',
+      ],
+      regras_de_nomenclatura: [
+        'Use sempre o nome Araçá Grill. Nunca cite nomes antigos.',
+        'nome_interno: Nome comercial + marca + volume/peso. Ex: "Azeite Gallo Extra Virgem 500ml"',
+        'Nunca use abreviações da NF-e: CERV, PIL, GFA, AZT, CX, FD, PCT, etc.',
+        'Nunca repita o fornecedor ou código no nome_interno.',
+        'Produtos por KG: unidade_estoque = KG, variante = "Pacote 5kg", "Saco 25kg", etc.',
+        'Bebidas: variante obrigatória. Ex: Garrafa 600ml | Lata 350ml | Long Neck 355ml | Galão 20L',
+      ],
+      exemplos_de_correcao: [
+        '"COCA COLA PET 2L CX" → nome_interno: "Coca-Cola 2L", variante: "Garrafa PET 2L", subcategoria: "Refrigerantes"',
+        '"CERV HEINEKEN PIL GFA 600" → nome_interno: "Cerveja Heineken Garrafa 600ml", variante: "Garrafa 600ml", subcategoria: "Cervejas"',
+        '"ARROZ T1 TIAO JOAO 5KG" → nome_interno: "Arroz Tio João Tipo 1", variante: "Pacote 5kg", subcategoria: "Grãos e Cereais"',
+        '"AGUA MINERAL 500ML S/G CX12" → nome_interno: "Água Mineral sem Gás", variante: "Garrafa 500ml", subcategoria: "Águas"',
+      ],
+      como_pesquisar_na_internet: [
+        'Se não reconhecer o produto, pesquise pelo EAN (campo codigo_barras) ou pelo nome normalizado',
+        'Use Open Food Facts, Google, site do fabricante para confirmar: nome comercial, marca, volume, embalagem',
+        'Nunca invente informações — se não souber, mantenha o campo como está',
+      ],
+      como_devolver: 'Retorne o arquivo JSON completo com a MESMA estrutura (schema_version, tabelas, etc). Altere APENAS os campos permitidos em tabelas.Produtos. Mantenha todos os outros dados exatamente como recebidos. O usuário vai importar diretamente no sistema.',
+      dica_de_eficiencia: 'Comece pelos produtos com subcategoria vazia (subcategoria = "") — são os que mais precisam de atenção. Use tabelas.Categorias para ver os ids corretos.',
+    },
+
+    resumo: {
+      total_produtos_ativos: produtos.filter((p) => String(p.ativo || 'SIM').toUpperCase() === 'SIM').length,
+      total_produtos: produtos.length,
+      sem_subcategoria: semSubcat,
+      sem_variante: semVariante,
+      sem_categoria: semCategoria,
+      nao_confirmados: naoConfirmados,
+      total_categorias: categorias.length,
+      total_fornecedores: fornecedores.length,
+      total_embalagens: embalagens.length,
+      total_aliases: aliases.length,
+      total_notas_fiscais: notas.length,
+      total_movimentacoes: movs.length,
+    },
+
+    tabelas: {
+      Configuracoes: configuracoes,
+      Categorias: categorias,
+      Fornecedores: fornecedores,
+      Produtos: produtos,
+      Embalagens: embalagens,
+      Aliases_Produto: aliases,
+      Produto_Fornecedor: prodForn,
+      Notas_Fiscais: notas,
+      Itens_Nota: itensNota,
+      Movimentacoes_Estoque: movs,
+    },
+  });
+}
+
+// ---------- BACKUP: IMPORTAR BANCO COMPLETO ----------
+async function importarBanco(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { erro: 'POST only' });
+  const b = await readBody(req);
+  let j = b.json;
+  if (typeof j === 'string') {
+    try { j = JSON.parse(j); } catch { return json(res, 400, { erro: 'JSON invalido.' }); }
+  }
+  if (!j || j.schema_version !== 'backup_1.0') {
+    return json(res, 400, { erro: 'Arquivo nao reconhecido. Falta schema_version "backup_1.0".' });
+  }
+
+  const limpar = b.limpar_antes === true;
+  const agora = nowStr();
+  const relatorio = {};
+
+  if (limpar) {
+    const ordemLimpeza = [
+      'Movimentacoes_Estoque', 'Itens_Nota', 'Notas_Fiscais',
+      'Aliases_Produto', 'Produto_Fornecedor', 'Embalagens', 'Produtos',
+      'Fornecedores', 'Categorias', 'Configuracoes',
+    ];
+    for (const t of ordemLimpeza) {
+      try { await deleteAllRows(t); relatorio[t + '_limpo'] = 'ok'; }
+      catch (e) { relatorio[t + '_limpo'] = 'erro: ' + e.message; }
+    }
+  }
+
+  const ordemInsercao = [
+    'Configuracoes', 'Categorias', 'Fornecedores', 'Produtos',
+    'Embalagens', 'Aliases_Produto', 'Produto_Fornecedor',
+    'Notas_Fiscais', 'Itens_Nota', 'Movimentacoes_Estoque',
+  ];
+
+  const tabs = j.tabelas || {};
+  for (const t of ordemInsercao) {
+    const rows = tabs[t];
+    if (!Array.isArray(rows)) { relatorio[t] = 'ausente no backup'; continue; }
+    let ok = 0, erros = 0;
+    for (const row of rows) {
+      try { await appendRow(t, { ...row, atualizado_em: row.atualizado_em || agora }); ok++; }
+      catch { erros++; }
+    }
+    relatorio[t] = ok + ' importados' + (erros ? ', ' + erros + ' erros' : '');
+  }
+
+  return json(res, 200, { ok: true, relatorio });
 }

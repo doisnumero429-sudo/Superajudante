@@ -348,7 +348,7 @@ async function entrada(req, res) {
 // Campos editáveis: nome, categoria, unidade, ean unitário, preço venda, estoque mínimo, obs.
 // NÃO altera: estoque_atual, custo_medio, ultimo_custo_unitario (apenas por entradas/saídas).
 const CAMPOS_EDITAVEIS = [
-  'nome_interno', 'categoria_id', 'unidade_estoque',
+  'nome_interno', 'categoria_id', 'subcategoria', 'unidade_estoque',
   'codigo_barras_unitario', 'preco_venda', 'estoque_minimo', 'observacoes',
 ];
 
@@ -585,6 +585,7 @@ async function treinoImportar(req, res) {
       await updateRow('Produtos', alvo.id_produto, {
         ...alvo, nome_interno: nome || alvo.nome_interno,
         categoria_id: categoriaId || alvo.categoria_id,
+        subcategoria: p.subcategoria || alvo.subcategoria || '',
         unidade_estoque: unidade || alvo.unidade_estoque,
         confirmado, atualizado_em: agora,
       });
@@ -595,7 +596,9 @@ async function treinoImportar(req, res) {
       const novo = {
         id_produto: id, cnpj_fornecedor: cnpj, codigo_produto_nf: codigo,
         codigo_barras: p.ean || '', descricao_original_nf: p.descricao_original_nfe || nome,
-        nome_interno: nome, categoria_id: categoriaId, fornecedor_principal_id: '',
+        nome_interno: nome, categoria_id: categoriaId,
+        subcategoria: p.subcategoria || '',
+        fornecedor_principal_id: '',
         unidade_compra: p.unidade_nfe || unidade, unidade_estoque: unidade,
         quantidade_por_embalagem: 1, fator_conversao: 1,
         estoque_minimo: parseFloat(p.estoque_minimo) || 0, estoque_atual: 0,
@@ -936,17 +939,36 @@ async function treinoFilaPacote(req, res) {
     readConfig(),
   ]);
   const ativos = produtos.filter((p) => String(p.ativo || 'SIM').toUpperCase() === 'SIM' && String(p.produto_teste || 'NAO').toUpperCase() !== 'SIM');
+
+  // Subcategorias agrupadas por categoria (para incluir no pacote do ChatGPT)
+  const subcatsPorCat = {};
+  ativos.forEach((p) => {
+    if (p.subcategoria) {
+      const k = p.categoria_id || '__';
+      if (!subcatsPorCat[k]) subcatsPorCat[k] = new Set();
+      subcatsPorCat[k].add(p.subcategoria);
+    }
+  });
+
   const contexto = {
-    schema_version: '1.0', tipo: 'contexto_super_ajudante',
+    schema_version: '1.1', tipo: 'contexto_super_ajudante',
     sistema: 'Super Ajudante Estoque', restaurante: cfg.NOME_RESTAURANTE || 'Araçá Grill',
     gerado_em: nowStr(),
-    produtos_internos: ativos.map((p) => ({
-      id_produto: p.id_produto, nome_interno: p.nome_interno,
-      categoria_id: p.categoria_id, unidade_estoque: p.unidade_estoque,
-      fator_conversao: p.fator_conversao, confirmado: p.confirmado || 'NAO',
-    })),
-    categorias: cats.map((c) => ({ id_categoria: c.id_categoria, nome_categoria: c.nome_categoria })),
-    fornecedores: fornecedores.map((f) => ({ cnpj: f.cnpj, razao_social: f.razao_social })),
+    categorias: cats
+      .sort((a, b) => (a.nome_categoria || '').localeCompare(b.nome_categoria || '', 'pt-BR'))
+      .map((c) => ({
+        id_categoria: c.id_categoria,
+        nome_categoria: c.nome_categoria,
+        subcategorias: [...(subcatsPorCat[c.id_categoria] || [])].sort((a, b) => a.localeCompare(b, 'pt-BR')),
+      })),
+    produtos_confirmados_amostra: ativos
+      .filter((p) => String(p.confirmado || 'NAO').toUpperCase() === 'SIM')
+      .sort((a, b) => (a.nome_interno || '').localeCompare(b.nome_interno || '', 'pt-BR'))
+      .slice(0, 40)
+      .map((p) => ({ nome_interno: p.nome_interno, categoria_id: p.categoria_id, subcategoria: p.subcategoria || '', unidade_estoque: p.unidade_estoque })),
+    fornecedores: fornecedores
+      .sort((a, b) => (a.razao_social || '').localeCompare(b.razao_social || '', 'pt-BR'))
+      .map((f) => ({ cnpj: f.cnpj, razao_social: f.razao_social })),
     mapeamentos_fornecedor_produto: pf,
     embalagens: embs.filter((e) => String(e.ativo || 'SIM').toUpperCase() === 'SIM'),
     aliases: aliases.filter((a) => String(a.ativo || 'SIM').toUpperCase() === 'SIM'),

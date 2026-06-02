@@ -84,6 +84,7 @@ button:active{transform:scale(.97)}
 .alertbar{background:#fee2e2;border:1px solid #fecaca;color:#b91c1c;padding:12px;border-radius:12px;font-size:13px;margin-bottom:14px}
 .empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px}
 .sec-title{font-size:12px;color:var(--pink);text-transform:uppercase;letter-spacing:.1em;margin:22px 0 8px;font-weight:700;padding-left:4px;border-left:3px solid var(--pink)}
+.subcat-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 3px;font-weight:600;padding-left:10px;border-left:2px solid var(--line)}
 nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--line);display:flex;z-index:40;padding:8px 4px env(safe-area-inset-bottom)}
 nav button{flex:1;background:none;color:var(--muted);padding:8px 2px;font-size:10.5px;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:4px}
 nav button.active{color:var(--accent)}
@@ -182,7 +183,11 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <input id="prod-nome" placeholder="Ex.: Cerveja Heineken 600ml">
 
     <label>Categoria</label>
-    <select id="prod-cat"><option value="">Categoria…</option></select>
+    <select id="prod-cat" onchange="atualizarSubcatOptions()"><option value="">Categoria…</option></select>
+
+    <label>Subcategoria <span class="muted small" style="font-weight:400">(opcional)</span></label>
+    <input id="prod-subcat" list="prod-subcat-opts" placeholder="Ex: Cervejas garrafa, Óleos e gorduras…" autocomplete="off">
+    <datalist id="prod-subcat-opts"></datalist>
 
     <label>Unidade de controle</label>
     <p class="muted small" style="margin-bottom:6px">Como este produto é contado. Ex.: UN, KG ou L.</p>
@@ -405,7 +410,7 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
   <div class="card">
     <p class="muted small" style="margin-bottom:12px">Copie o pacote e cole no ChatGPT. Ele já inclui o comando, o contexto atual do sistema e os produtos desconhecidos.</p>
     <button class="btn" id="btn-copiar-pacote" style="width:100%;padding:14px;font-size:15px" onclick="copiarPacoteCompleto()">📋 Copiar pacote completo para ChatGPT</button>
-    <button class="btn-2" style="width:100%;padding:12px;margin-top:8px" onclick="baixarPacoteCompleto()">⬇ Baixar pacote como arquivo .txt</button>
+    <button class="btn-2" style="width:100%;padding:12px;margin-top:8px" onclick="baixarPacoteCompleto()">📤 Compartilhar / Baixar pacote (.txt)</button>
   </div>
 
   <!-- PASSO 3: Importar resposta -->
@@ -952,11 +957,14 @@ function renderEstoque(list){
     el.innerHTML=list.map(p=>_renderProdRow(p)).join('') || '<div class="empty">Nenhum produto encontrado.</div>';
     return;
   }
-  // Agrupa por categoria, alfabético dentro de cada grupo
+  // Agrupa por categoria → subcategoria → produto (todos em ordem alfabética)
   const grupos={};
   list.forEach(p=>{
-    const k=p.categoria_id||'__';
-    (grupos[k]=grupos[k]||[]).push(p);
+    const catK=p.categoria_id||'__';
+    const subK=(p.subcategoria||'').trim()||'__sub__';
+    if(!grupos[catK]) grupos[catK]={};
+    if(!grupos[catK][subK]) grupos[catK][subK]=[];
+    grupos[catK][subK].push(p);
   });
   const catsSorted=Object.keys(grupos).sort((a,b)=>{
     if(a==='__') return 1; if(b==='__') return -1;
@@ -965,11 +973,19 @@ function renderEstoque(list){
     return na.localeCompare(nb,'pt-BR');
   });
   let html='';
-  catsSorted.forEach(k=>{
-    const nome=k==='__'?'Sem categoria':(catCache?.find(c=>c.id_categoria===k)?.nome_categoria||k);
-    const prods=grupos[k].sort((a,b)=>(a.nome_interno||'').localeCompare(b.nome_interno||'','pt-BR'));
-    html+=`<div class="sec-title" style="margin-top:14px;margin-bottom:2px">${esc(nome)}</div>`;
-    html+=prods.map(p=>_renderProdRow(p)).join('');
+  catsSorted.forEach(catK=>{
+    const catNome=catK==='__'?'Sem categoria':(catCache?.find(c=>c.id_categoria===catK)?.nome_categoria||catK);
+    html+=`<div class="sec-title" style="margin-top:14px;margin-bottom:2px">${esc(catNome)}</div>`;
+    const subGrupos=grupos[catK];
+    const subcatsSorted=Object.keys(subGrupos).sort((a,b)=>{
+      if(a==='__sub__') return 1; if(b==='__sub__') return -1;
+      return a.localeCompare(b,'pt-BR');
+    });
+    subcatsSorted.forEach(subK=>{
+      if(subK!=='__sub__') html+=`<div class="subcat-title">${esc(subK)}</div>`;
+      const prods=subGrupos[subK].sort((a,b)=>(a.nome_interno||'').localeCompare(b.nome_interno||'','pt-BR'));
+      html+=prods.map(p=>_renderProdRow(p)).join('');
+    });
   });
   el.innerHTML=html;
 }
@@ -1003,6 +1019,8 @@ async function abrirProduto(id){
   document.getElementById('prod-nome').value=prod.nome_interno||'';
   await carregarCatSelect('prod-cat', false);
   document.getElementById('prod-cat').value=prod.categoria_id||'';
+  document.getElementById('prod-subcat').value=prod.subcategoria||'';
+  atualizarSubcatOptions();
   const uSel=document.getElementById('prod-unidade');
   uSel.value=prod.unidade_estoque||'UN';
   if(prod.unidade_estoque && !uSel.value){
@@ -1167,6 +1185,16 @@ function abrirDetalheMovimentacao(idMov){
 }
 
 // Busca produto por nome no inventário
+function atualizarSubcatOptions(){
+  const catId=document.getElementById('prod-cat')?.value;
+  const dl=document.getElementById('prod-subcat-opts');
+  if(!dl) return;
+  const subcats=[...new Set(
+    estoqueCache.filter(p=>p.categoria_id===catId&&p.subcategoria).map(p=>p.subcategoria)
+  )].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  dl.innerHTML=subcats.map(s=>`<option value="${esc(s)}">`).join('');
+}
+
 function buscarPorNomeInventario(){
   const q=document.getElementById('inv-nome').value.toLowerCase().trim();
   const lista=document.getElementById('inv-nome-list');
@@ -1226,6 +1254,7 @@ async function salvarProduto(){
     id_produto:id,
     nome_interno:document.getElementById('prod-nome').value.trim(),
     categoria_id:document.getElementById('prod-cat').value,
+    subcategoria:document.getElementById('prod-subcat').value.trim(),
     unidade_estoque:document.getElementById('prod-unidade').value,
     codigo_barras_unitario:document.getElementById('prod-ean').value.trim(),
     preco_venda:parseFloat(document.getElementById('prod-preco').value)||0,
@@ -2054,14 +2083,20 @@ async function baixarPacoteCompleto(){
   try{
     const pacote=await api('/api/admin?recurso=treino-fila-pacote');
     const texto=montarTextoPacote(pacote);
+    const nomeArq='pacote_chatgpt_'+new Date().toISOString().slice(0,10)+'.txt';
     const blob=new Blob([texto],{type:'text/plain;charset=utf-8'});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a'); a.href=url; a.download='pacote_chatgpt_treinamento_araca_grill.txt';
-    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    try{ await navigator.clipboard.writeText(texto); }catch(_){}
-    toast('Pacote baixado ✓','ok');
+    const file=new File([blob],nomeArq,{type:'text/plain'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({title:'Pacote ChatGPT — Araçá Grill',files:[file]});
+      toast('Arquivo compartilhado ✓','ok');
+    } else {
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download=nomeArq;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      toast('Pacote baixado ✓','ok');
+    }
     if(!pacote.tem_esteira) toast('⚠ Esteira vazia — usados pendentes do banco.','');
-  }catch(e){ toast(e.message,'err'); }
+  }catch(e){ if(e.name!=='AbortError') toast(e.message,'err'); }
 }
 
 async function limparEsteira(){

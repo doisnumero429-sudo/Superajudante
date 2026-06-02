@@ -84,8 +84,21 @@ button:active{transform:scale(.97)}
 .alertbar{background:#fee2e2;border:1px solid #fecaca;color:#b91c1c;padding:12px;border-radius:12px;font-size:13px;margin-bottom:14px}
 .empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px}
 .sec-title{font-size:12px;color:var(--pink);text-transform:uppercase;letter-spacing:.1em;margin:22px 0 8px;font-weight:700;padding-left:4px;border-left:3px solid var(--pink)}
-.subcat-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 3px;font-weight:600;padding-left:10px;border-left:2px solid var(--line)}
-.variante-title{font-size:10.5px;color:var(--muted);margin:5px 0 2px;font-weight:500;padding-left:20px;border-left:1px dashed var(--line);font-style:italic}
+.subcat-title{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--accent);background:rgba(37,99,235,.08);border-radius:20px;padding:3px 10px 3px 7px;margin:10px 0 4px;letter-spacing:.03em;text-transform:uppercase}
+.subcat-title::before{content:'●';font-size:6px;opacity:.65}
+.variante-title{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);margin:4px 0 2px 14px;font-weight:500;font-style:italic}
+.variante-title::before{content:'↳';font-style:normal;opacity:.45;font-size:12px}
+.acc-item{border:1px solid var(--line);border-radius:10px;margin-bottom:6px;overflow:hidden}
+.acc-head{width:100%;display:flex;align-items:center;gap:8px;padding:11px 14px;background:none;border:none;cursor:pointer;text-align:left;color:var(--ink)}
+.acc-head:hover{background:rgba(0,0,0,.025)}
+.acc-t{flex:1;font-size:13px;font-weight:600}
+.acc-n{font-size:12px;font-weight:700;padding:2px 9px;border-radius:20px;background:rgba(37,99,235,.1);color:var(--accent)}
+.acc-n.ok{background:rgba(22,163,74,.1);color:#16a34a}
+.acc-n.warn{background:rgba(217,119,6,.1);color:#d97706}
+.acc-n.err{background:rgba(220,38,38,.1);color:var(--danger)}
+.acc-chevron{font-size:14px;color:var(--muted);transition:transform .2s;display:inline-block}
+.acc-head[aria-expanded=true] .acc-chevron{transform:rotate(90deg)}
+.acc-body{padding:2px 14px 12px;font-size:13px}
 nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--line);display:flex;z-index:40;padding:8px 4px env(safe-area-inset-bottom)}
 nav button{flex:1;background:none;color:var(--muted);padding:8px 2px;font-size:10.5px;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:4px}
 nav button.active{color:var(--accent)}
@@ -525,6 +538,15 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
 const API = window.Capacitor?.isNativePlatform?.() ? 'https://superajudante.vercel.app' : '';
 let confData = null, estoqueCache = [], _activeScan = null;
 
+function mkAcc(titulo, count, corpo, {aberto=false, cor=''}={}){
+  const cls = cor ? cor : (count===0?'ok':'');
+  return `<div class="acc-item">
+    <button class="acc-head" aria-expanded="${aberto}" onclick="var b=this.nextElementSibling,o=b.style.display==='none';b.style.display=o?'block':'none';this.setAttribute('aria-expanded',o)">
+      <span class="acc-t">${titulo}</span><span class="acc-n ${cls}">${count}</span><span class="acc-chevron">›</span>
+    </button>
+    <div class="acc-body" style="display:${aberto?'block':'none'}">${corpo}</div>
+  </div>`;
+}
 function toast(msg, type=''){
   const t = document.getElementById('toast');
   t.textContent = msg; t.className = 'toast show ' + type;
@@ -1005,7 +1027,7 @@ function renderEstoque(list){
       return a.localeCompare(b,'pt-BR');
     });
     subcatsSorted.forEach(subK=>{
-      if(subK!=='__sub__') html+=`<div class="subcat-title">${esc(subK)}</div>`;
+      if(subK!=='__sub__') html+=`<div style="margin:10px 0 4px"><span class="subcat-title">${esc(subK)}</span></div>`;
       const varGrupos=subGrupos[subK];
       const varsSorted=Object.keys(varGrupos).sort((a,b)=>{
         if(a==='__var__') return 1; if(b==='__var__') return -1;
@@ -1903,9 +1925,27 @@ async function loadAuditoria(){
       <div class="stat ${s.cnpj_codigo_duplicado>0?'alert':'good'}"><div class="n">${s.cnpj_codigo_duplicado}</div><div class="l">CNPJ+cód dup.</div></div>
       <div class="stat ${s.alias_produto_invalido>0?'warn':'good'}"><div class="n">${s.alias_produto_invalido}</div><div class="l">alias órfão</div></div>
     </div>`;
+    const grupos={};
+    for(const a of r.alertas){
+      (grupos[a.tipo]=grupos[a.tipo]||[]).push(a);
+    }
+    const labelTipo={
+      sem_categoria:'Sem categoria', sem_mapeamento:'Sem mapeamento',
+      sem_embalagem:'Sem embalagem', cnpj_codigo_duplicado:'CNPJ+cód duplicado',
+      alias_produto_invalido:'Alias órfão',
+    };
+    const corTipo={
+      sem_categoria:'err', cnpj_codigo_duplicado:'err',
+      sem_mapeamento:'warn', sem_embalagem:'warn', alias_produto_invalido:'warn',
+    };
     const alertasHtml = r.alertas.length
-      ? r.alertas.map(a=>`<div class="list-row"><div><div class="t">${tipoBadge[a.tipo]||a.tipo} ${esc(a.nome_interno||a.nome_a||a.alias||'')}</div>
-          <div class="s">${esc(a.detalhe||a.motivo||a.chave_duplicada||'')}</div></div></div>`).join('')
+      ? Object.entries(grupos).map(([tipo,items])=>{
+          const corpo=items.map(a=>`<div class="list-row" style="padding:8px 0"><div>
+            <div class="t">${esc(a.nome_interno||a.nome_a||a.alias||a.chave_duplicada||'')}</div>
+            <div class="s">${esc(a.detalhe||a.motivo||a.chave_duplicada||'')}</div>
+          </div></div>`).join('');
+          return mkAcc(labelTipo[tipo]||tipo, items.length, corpo, {cor:corTipo[tipo]||'warn'});
+        }).join('')
       : '<div class="muted small">Nenhuma inconsistência encontrada ✓</div>';
     el.innerHTML = `<p class="muted small" style="margin-bottom:10px">${s.total_produtos_ativos} produtos ativos analisados.</p>${statsHtml}<div>${alertasHtml}</div>`;
   }catch(e){ el.innerHTML=`<div class="empty">${e.message}</div>`; }
@@ -2489,8 +2529,17 @@ async function importarBackup(){
   try{
     box.textContent='Importando…';
     const r=await api('/api/admin?recurso=importar-banco',{method:'POST',body:JSON.stringify({json:txt,limpar_antes:false})});
-    const linhas=Object.entries(r.relatorio||{}).map(([k,v])=>`  ${k}: ${v}`);
-    box.textContent='✅ Importado!\n'+linhas.join('\n');
+    const rel=r.relatorio||{};
+    const total=Object.values(rel).filter(v=>typeof v==='string'&&v.includes('importados')).reduce((s,v)=>s+parseInt(v)||s,0);
+    box.innerHTML=`<div class="prev" style="margin-bottom:8px">✅ Backup importado com sucesso.</div>`
+      +Object.entries(rel).map(([k,v])=>{
+        const n=parseInt(v)||0;
+        const err=String(v).includes('erro');
+        const ausente=String(v).includes('ausente');
+        const cor=err?'err':ausente?'warn':'ok';
+        const label=k.replace(/_limpo$/,' (limpeza)').replace(/_/g,' ');
+        return mkAcc(label,ausente?'—':n,`<div class="muted small" style="padding:2px 0">${esc(v)}</div>`,{cor});
+      }).join('');
     toast('Backup importado ✓','ok');
   }catch(e){box.textContent='❌ '+e.message;toast(e.message,'err');}
 }
@@ -2556,17 +2605,22 @@ async function importarTreino(substituir, jsonId='treino-json', boxId='treino-re
     const r = await api('/api/admin?recurso=treino-importar',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({json:txt, substituir:!!substituir})});
     const rel=r.relatorio;
-    let html=`<div class="prev">✓ Importação concluída.<br>
-      Produtos: <b>${rel.produtos_criados}</b> criados, <b>${rel.produtos_atualizados}</b> atualizados.<br>
-      Embalagens: <b>${rel.embalagens_criadas}</b> · Mapeamentos: <b>${rel.mapeamentos_criados}</b> · Aliases: <b>${rel.aliases_criados}</b></div>`;
-    if(rel.conflitos && rel.conflitos.length){
-      html += `<div class="alertbar" style="margin-top:10px">⚠ ${rel.conflitos.length} produto(s) já possuem cadastro confirmado e não foram sobrescritos:<br>• `
-        + rel.conflitos.map(c=>esc(c.nome_interno||c.id_produto)).join('<br>• ')
-        + `<div class="row" style="margin-top:10px">
-            <button class="btn-2 btn-sm" style="width:100%;padding:10px" onclick="document.getElementById('${boxId}').querySelector('.alertbar').remove()">Manter atuais</button>
-            <button class="btn-2 btn-sm" style="width:100%;padding:10px;background:var(--danger);color:#fff" onclick="importarTreino(true,'${jsonId}','${boxId}')">Substituir</button>
-          </div></div>`;
+    const statsHtml=`<div class="prev" style="margin-bottom:8px">✓ Importação concluída — <b>${rel.produtos_criados+rel.produtos_atualizados}</b> produtos, <b>${rel.embalagens_criadas}</b> embalagens, <b>${rel.mapeamentos_criados}</b> mapeamentos, <b>${rel.aliases_criados}</b> aliases.</div>`;
+    const conflitos=rel.conflitos||[];
+    const semProd=rel.aliases_sem_produto||[];
+    const catInv=rel.categoria_id_invalida||[];
+    let html=statsHtml;
+    if(conflitos.length){
+      const corpo=`<p class="muted small" style="margin-bottom:8px">Produto(s) já confirmados não foram sobrescritos. Quer substituir?</p>`
+        +conflitos.map(c=>`<div class="list-row"><div class="t">${esc(c.nome_interno||c.id_produto)}</div></div>`).join('')
+        +`<div class="row" style="margin-top:10px;gap:8px">
+            <button class="btn-2 btn-sm" style="width:100%;padding:10px" onclick="document.getElementById('${boxId}').innerHTML=''">Manter atuais</button>
+            <button class="btn-2 btn-sm" style="width:100%;padding:10px;background:var(--danger);color:#fff" onclick="importarTreino(true,'${jsonId}','${boxId}')">Substituir todos</button>
+          </div>`;
+      html+=mkAcc('Conflitos — já confirmados',conflitos.length,corpo,{aberto:true,cor:'err'});
     }
+    if(semProd.length) html+=mkAcc('Aliases sem produto',semProd.length,semProd.map(a=>`<div class="s" style="padding:2px 0">${esc(a.alias||a)}</div>`).join(''),{cor:'warn'});
+    if(catInv.length)  html+=mkAcc('Categoria inválida',catInv.length,catInv.map(a=>`<div class="s" style="padding:2px 0">${esc(a.nome_interno||a.categoria_id_recebida)}</div>`).join(''),{cor:'warn'});
     if(box) box.innerHTML=html;
     estoqueCache=[]; embCache={}; catCache=null;
   }catch(e){

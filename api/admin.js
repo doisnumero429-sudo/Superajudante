@@ -348,7 +348,7 @@ async function entrada(req, res) {
 // Campos editáveis: nome, categoria, unidade, ean unitário, preço venda, estoque mínimo, obs.
 // NÃO altera: estoque_atual, custo_medio, ultimo_custo_unitario (apenas por entradas/saídas).
 const CAMPOS_EDITAVEIS = [
-  'nome_interno', 'categoria_id', 'subcategoria', 'unidade_estoque',
+  'nome_interno', 'categoria_id', 'subcategoria', 'variante', 'unidade_estoque',
   'codigo_barras_unitario', 'preco_venda', 'estoque_minimo', 'observacoes',
 ];
 
@@ -586,6 +586,7 @@ async function treinoImportar(req, res) {
         ...alvo, nome_interno: nome || alvo.nome_interno,
         categoria_id: categoriaId || alvo.categoria_id,
         subcategoria: p.subcategoria || alvo.subcategoria || '',
+        variante: p.variante || alvo.variante || '',
         unidade_estoque: unidade || alvo.unidade_estoque,
         confirmado, atualizado_em: agora,
       });
@@ -598,6 +599,7 @@ async function treinoImportar(req, res) {
         codigo_barras: p.ean || '', descricao_original_nf: p.descricao_original_nfe || nome,
         nome_interno: nome, categoria_id: categoriaId,
         subcategoria: p.subcategoria || '',
+        variante: p.variante || '',
         fornecedor_principal_id: '',
         unidade_compra: p.unidade_nfe || unidade, unidade_estoque: unidade,
         quantidade_por_embalagem: 1, fator_conversao: 1,
@@ -965,7 +967,7 @@ async function treinoFilaPacote(req, res) {
       .filter((p) => String(p.confirmado || 'NAO').toUpperCase() === 'SIM')
       .sort((a, b) => (a.nome_interno || '').localeCompare(b.nome_interno || '', 'pt-BR'))
       .slice(0, 40)
-      .map((p) => ({ nome_interno: p.nome_interno, categoria_id: p.categoria_id, subcategoria: p.subcategoria || '', unidade_estoque: p.unidade_estoque })),
+      .map((p) => ({ nome_interno: p.nome_interno, categoria_id: p.categoria_id, subcategoria: p.subcategoria || '', variante: p.variante || '', unidade_estoque: p.unidade_estoque })),
     fornecedores: fornecedores
       .sort((a, b) => (a.razao_social || '').localeCompare(b.razao_social || '', 'pt-BR'))
       .map((f) => ({ cnpj: f.cnpj, razao_social: f.razao_social })),

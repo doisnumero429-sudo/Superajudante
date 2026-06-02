@@ -85,6 +85,7 @@ button:active{transform:scale(.97)}
 .empty{text-align:center;color:var(--muted);padding:40px 20px;font-size:14px}
 .sec-title{font-size:12px;color:var(--pink);text-transform:uppercase;letter-spacing:.1em;margin:22px 0 8px;font-weight:700;padding-left:4px;border-left:3px solid var(--pink)}
 .subcat-title{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin:8px 0 3px;font-weight:600;padding-left:10px;border-left:2px solid var(--line)}
+.variante-title{font-size:10.5px;color:var(--muted);margin:5px 0 2px;font-weight:500;padding-left:20px;border-left:1px dashed var(--line);font-style:italic}
 nav{position:fixed;bottom:0;left:0;right:0;background:var(--surface);border-top:1px solid var(--line);display:flex;z-index:40;padding:8px 4px env(safe-area-inset-bottom)}
 nav button{flex:1;background:none;color:var(--muted);padding:8px 2px;font-size:10.5px;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:4px}
 nav button.active{color:var(--accent)}
@@ -186,8 +187,12 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <select id="prod-cat" onchange="atualizarSubcatOptions()"><option value="">Categoria…</option></select>
 
     <label>Subcategoria <span class="muted small" style="font-weight:400">(opcional)</span></label>
-    <input id="prod-subcat" list="prod-subcat-opts" placeholder="Ex: Cervejas garrafa, Óleos e gorduras…" autocomplete="off">
+    <input id="prod-subcat" list="prod-subcat-opts" placeholder="Ex: Cervejas garrafa, Óleos e gorduras…" autocomplete="off" onchange="atualizarVarianteOptions()">
     <datalist id="prod-subcat-opts"></datalist>
+
+    <label>Variante <span class="muted small" style="font-weight:400">(formato/apresentação — obrigatório para bebidas)</span></label>
+    <input id="prod-variante" list="prod-variante-opts" placeholder="Ex: Garrafa 600ml, Lata 350ml, Galão 20L…" autocomplete="off">
+    <datalist id="prod-variante-opts"></datalist>
 
     <label>Unidade de controle</label>
     <p class="muted small" style="margin-bottom:6px">Como este produto é contado. Ex.: UN, KG ou L.</p>
@@ -957,14 +962,16 @@ function renderEstoque(list){
     el.innerHTML=list.map(p=>_renderProdRow(p)).join('') || '<div class="empty">Nenhum produto encontrado.</div>';
     return;
   }
-  // Agrupa por categoria → subcategoria → produto (todos em ordem alfabética)
+  // Agrupa por categoria → subcategoria → variante → produto (todos em ordem alfabética)
   const grupos={};
   list.forEach(p=>{
     const catK=p.categoria_id||'__';
     const subK=(p.subcategoria||'').trim()||'__sub__';
+    const varK=(p.variante||'').trim()||'__var__';
     if(!grupos[catK]) grupos[catK]={};
-    if(!grupos[catK][subK]) grupos[catK][subK]=[];
-    grupos[catK][subK].push(p);
+    if(!grupos[catK][subK]) grupos[catK][subK]={};
+    if(!grupos[catK][subK][varK]) grupos[catK][subK][varK]=[];
+    grupos[catK][subK][varK].push(p);
   });
   const catsSorted=Object.keys(grupos).sort((a,b)=>{
     if(a==='__') return 1; if(b==='__') return -1;
@@ -983,8 +990,16 @@ function renderEstoque(list){
     });
     subcatsSorted.forEach(subK=>{
       if(subK!=='__sub__') html+=`<div class="subcat-title">${esc(subK)}</div>`;
-      const prods=subGrupos[subK].sort((a,b)=>(a.nome_interno||'').localeCompare(b.nome_interno||'','pt-BR'));
-      html+=prods.map(p=>_renderProdRow(p)).join('');
+      const varGrupos=subGrupos[subK];
+      const varsSorted=Object.keys(varGrupos).sort((a,b)=>{
+        if(a==='__var__') return 1; if(b==='__var__') return -1;
+        return a.localeCompare(b,'pt-BR');
+      });
+      varsSorted.forEach(varK=>{
+        if(varK!=='__var__') html+=`<div class="variante-title">${esc(varK)}</div>`;
+        const prods=varGrupos[varK].sort((a,b)=>(a.nome_interno||'').localeCompare(b.nome_interno||'','pt-BR'));
+        html+=prods.map(p=>_renderProdRow(p)).join('');
+      });
     });
   });
   el.innerHTML=html;
@@ -1020,7 +1035,9 @@ async function abrirProduto(id){
   await carregarCatSelect('prod-cat', false);
   document.getElementById('prod-cat').value=prod.categoria_id||'';
   document.getElementById('prod-subcat').value=prod.subcategoria||'';
+  document.getElementById('prod-variante').value=prod.variante||'';
   atualizarSubcatOptions();
+  atualizarVarianteOptions();
   const uSel=document.getElementById('prod-unidade');
   uSel.value=prod.unidade_estoque||'UN';
   if(prod.unidade_estoque && !uSel.value){
@@ -1193,6 +1210,18 @@ function atualizarSubcatOptions(){
     estoqueCache.filter(p=>p.categoria_id===catId&&p.subcategoria).map(p=>p.subcategoria)
   )].sort((a,b)=>a.localeCompare(b,'pt-BR'));
   dl.innerHTML=subcats.map(s=>`<option value="${esc(s)}">`).join('');
+  atualizarVarianteOptions();
+}
+
+function atualizarVarianteOptions(){
+  const catId=document.getElementById('prod-cat')?.value;
+  const subcat=document.getElementById('prod-subcat')?.value||'';
+  const dl=document.getElementById('prod-variante-opts');
+  if(!dl) return;
+  const variantes=[...new Set(
+    estoqueCache.filter(p=>p.categoria_id===catId&&(!subcat||p.subcategoria===subcat)&&p.variante).map(p=>p.variante)
+  )].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  dl.innerHTML=variantes.map(v=>`<option value="${esc(v)}">`).join('');
 }
 
 function buscarPorNomeInventario(){
@@ -1255,6 +1284,7 @@ async function salvarProduto(){
     nome_interno:document.getElementById('prod-nome').value.trim(),
     categoria_id:document.getElementById('prod-cat').value,
     subcategoria:document.getElementById('prod-subcat').value.trim(),
+    variante:document.getElementById('prod-variante').value.trim(),
     unidade_estoque:document.getElementById('prod-unidade').value,
     codigo_barras_unitario:document.getElementById('prod-ean').value.trim(),
     preco_venda:parseFloat(document.getElementById('prod-preco').value)||0,
@@ -2024,7 +2054,8 @@ function montarTextoPacote(pacote){
     ?amostra.map(p=>{
         const catNome=cats.find(c=>c.id_categoria===p.categoria_id)?.nome_categoria||'';
         const sub=p.subcategoria?` > ${p.subcategoria}`:'';
-        return`  • ${p.nome_interno} [${catNome}${sub}] (${p.unidade_estoque})`;
+        const vari=p.variante?` / ${p.variante}`:'';
+        return`  • ${p.nome_interno} [${catNome}${sub}${vari}] (${p.unidade_estoque})`;
       }).join('\n')
     :'  (nenhum produto confirmado ainda — seja conservador com a nomenclatura)';
 
@@ -2073,6 +2104,23 @@ function montarTextoPacote(pacote){
     '  NF-e: "CERV HEINEKEN PIL 0.600 GFA"   →  Cerveja Heineken Garrafa 600ml',
     '  NF-e: "ARROZ TIPO 1 TIÃO JOÃO 5KG"   →  Arroz Tio João Tipo 1 5kg',
     '  NF-e: "KETCHUP SACHE 8CXC192UN"       →  Sachê de Ketchup [Marca]',
+    '',
+    '━━━ [5] VARIANTE (terceiro nível de classificação) ━━━',
+    '"variante" descreve a apresentação física específica do produto dentro da subcategoria.',
+    'OBRIGATÓRIO para bebidas. RECOMENDADO para qualquer produto com variações relevantes.',
+    'NUNCA deixe categoria ou subcategoria em branco — se não tiver certeza, use confianca MEDIA.',
+    '',
+    'Exemplos por subcategoria:',
+    '  Cervejas:      Garrafa 600ml | Garrafa 1L | Lata 350ml | Long Neck 355ml',
+    '  Refrigerantes: Garrafa 1L | Garrafa 2L | Lata 350ml | Garrafa 600ml',
+    '  Águas:         Garrafa 500ml sem gás | Garrafa 500ml com gás | Galão 20L',
+    '  Sucos:         Caixinha 1L | Garrafa 1L | Lata 290ml',
+    '  Destilados:    Garrafa 1L | Garrafa 700ml | Miniatura 50ml',
+    '  Arroz:         Pacote 5kg | Saco 25kg | Pacote 1kg',
+    '  Queijos:       Peça | Fatiado | Ralado',
+    '  Detergente:    500ml | 5L | Refil',
+    '',
+    'Se não houver variação relevante dentro da subcategoria, deixe variante em branco.',
     '',
     '━━━ [5] EMBALAGENS E FATORES ━━━━━━━━━━━━━━━━━━━━━━━━',
     'A unidade_estoque é sempre a unidade mínima controlada (KG, UN, L, ML).',
@@ -2147,6 +2195,7 @@ function montarTextoPacote(pacote){
         descricao_original_nfe:'DESCRICAO COMO VEIO NA NF-e',
         categoria:'Nome da categoria existente',
         subcategoria:'Nome da subcategoria (existente ou nova)',
+        variante: 'Apresentação física: Garrafa 600ml, Lata 350ml, Galão 20L… (vazio se não aplicável)',
         unidade_estoque:'KG|UN|L|ML',
         cnpj_fornecedor:'00000000000000',
         codigo_produto_nf:'codigo',

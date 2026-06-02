@@ -2280,16 +2280,20 @@ async function baixarPacoteCompleto(){
     const texto=montarTextoPacote(pacote);
     const nomeArq='pacote_chatgpt_'+new Date().toISOString().slice(0,10)+'.txt';
     const blob=new Blob([texto],{type:'text/plain;charset=utf-8'});
-    const file=new File([blob],nomeArq,{type:'text/plain'});
-    if(navigator.canShare&&navigator.canShare({files:[file]})){
-      await navigator.share({title:'Pacote ChatGPT — Araçá Grill',files:[file]});
-      toast('Arquivo compartilhado ✓','ok');
-    } else {
+    let ok=false;
+    if(navigator.canShare){
+      const file=new File([blob],nomeArq,{type:'text/plain'});
+      if(navigator.canShare({files:[file]})){
+        try{ await navigator.share({title:'Pacote ChatGPT — Araçá Grill',files:[file]}); ok=true; }
+        catch(e2){ if(e2.name==='AbortError') return; /* cancelou */ }
+      }
+    }
+    if(!ok){
       const url=URL.createObjectURL(blob);
       const a=document.createElement('a'); a.href=url; a.download=nomeArq;
       document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-      toast('Pacote baixado ✓','ok');
     }
+    toast('Pacote pronto ✓','ok');
     if(!pacote.tem_esteira) toast('⚠ Esteira vazia — usados pendentes do banco.','');
   }catch(e){ if(e.name!=='AbortError') toast(e.message,'err'); }
 }
@@ -2433,19 +2437,23 @@ async function baixarBackupCompleto(){
     const dados=await api('/api/admin?recurso=exportar-banco');
     const txt=JSON.stringify(dados,null,2);
     const nome='backup_superajudante_'+new Date().toISOString().slice(0,10)+'.json';
-    const blob=new Blob([txt],{type:'application/json;charset=utf-8'});
-    const file=new File([blob],nome,{type:'application/json'});
-    if(navigator.canShare&&navigator.canShare({files:[file]})){
-      await navigator.share({title:'Backup Super Ajudante — Araçá Grill',files:[file]});
-    }else{
-      const a=document.createElement('a');
-      a.href=URL.createObjectURL(blob);
-      a.download=nome;
-      a.click();
+    const blob=new Blob([txt],{type:'text/plain;charset=utf-8'});
+    let ok=false;
+    if(navigator.canShare){
+      const file=new File([blob],nome,{type:'text/plain'});
+      if(navigator.canShare({files:[file]})){
+        try{ await navigator.share({title:'Backup Super Ajudante — Araçá Grill',files:[file]}); ok=true; }
+        catch(e2){ if(e2.name==='AbortError') return; /* cancelou */ }
+      }
+    }
+    if(!ok){
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download=nome;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
     }
     const r=dados.resumo||{};
     toast(`Backup gerado ✓ — ${r.total_produtos||0} produtos, ${r.sem_subcategoria||0} sem subcategoria`,'ok');
-  }catch(e){toast(e.message,'err');}
+  }catch(e){ if(e.name!=='AbortError') toast(e.message,'err'); }
 }
 
 function lerArquivoBackup(){

@@ -2040,7 +2040,7 @@ async function adicionarNaEsteira(){
 function montarTextoPacote(pacote){
   const ctx=pacote.contexto||{};
   const cats=(ctx.categorias||[]);
-  const amostra=(ctx.produtos_confirmados_amostra||[]);
+  const todos=(ctx.todos_produtos||[]);
 
   const catsBloco=cats.length
     ?cats.map(c=>{
@@ -2050,14 +2050,15 @@ function montarTextoPacote(pacote){
       }).join('\n')
     :'  (nenhuma categoria cadastrada ainda)';
 
-  const amBloco=amostra.length
-    ?amostra.map(p=>{
+  const todosBloco=todos.length
+    ?todos.map(p=>{
         const catNome=cats.find(c=>c.id_categoria===p.categoria_id)?.nome_categoria||'';
         const sub=p.subcategoria?` > ${p.subcategoria}`:'';
         const vari=p.variante?` / ${p.variante}`:'';
-        return`  • ${p.nome_interno} [${catNome}${sub}${vari}] (${p.unidade_estoque})`;
+        const flag=(!p.subcategoria||!p.variante)?` ⚠`:'';
+        return`  [${p.id_produto}] ${p.nome_interno} [${catNome}${sub}${vari}] (${p.unidade_estoque})${flag}`;
       }).join('\n')
-    :'  (nenhum produto confirmado ainda — seja conservador com a nomenclatura)';
+    :'  (nenhum produto cadastrado ainda)';
 
   const avisoEsteira=(!pacote.tem_esteira&&pacote.desconhecidos?.aviso)
     ?`\n⚠ AVISO: ${pacote.desconhecidos.aviso}\n`:'\n';
@@ -2175,10 +2176,16 @@ function montarTextoPacote(pacote){
     '',
     catsBloco,
     '',
-    '━━━ [10] PRODUTOS JÁ CADASTRADOS (amostra para referência) ━━',
-    'Use como referência de nomenclatura e para evitar duplicações:',
+    '━━━ [10] TODOS OS PRODUTOS — REVISAR E ATUALIZAR ━━━━━━━━',
+    'Lista completa dos produtos cadastrados no sistema. Produtos marcados com ⚠ estão',
+    'com subcategoria ou variante vazia — preencha obrigatoriamente.',
     '',
-    amBloco,
+    'Para ATUALIZAR um produto existente: inclua-o em produtos_confirmados com o',
+    'mesmo id_produto da lista abaixo + categoria_id + unidade_estoque mantidos.',
+    'Para CRIAR produto novo (NF-e): inclua sem id_produto (ou id_produto: null).',
+    'Retorne SOMENTE os que precisam de correção/complemento — não precisa retornar todos.',
+    '',
+    todosBloco,
     '',
     '━━━ [11] PRODUTOS DESCONHECIDOS DESTA ESTEIRA ━━━━━━━━',
     JSON.stringify(pacote.desconhecidos,null,2),
@@ -2191,14 +2198,16 @@ function montarTextoPacote(pacote){
       schema_version:'1.1',tipo:'catalogo_revisado_gpt',origem:'chatgpt',
       restaurante:'Araçá Grill',gerado_em:'DD/MM/AAAA HH:mm',
       produtos_confirmados:[{
+        id_produto:'PRD-XXXX (preencha da lista [10] para ATUALIZAR) | null para produto NOVO',
         nome_interno:'Nome limpo em português',
-        descricao_original_nfe:'DESCRICAO COMO VEIO NA NF-e',
+        descricao_original_nfe:'DESCRICAO COMO VEIO NA NF-e (omita se for atualização)',
         categoria:'Nome da categoria existente',
+        categoria_id:'id_categoria da lista [9] (prefira este)',
         subcategoria:'Nome da subcategoria (existente ou nova)',
-        variante: 'Apresentação física: Garrafa 600ml, Lata 350ml, Galão 20L… (vazio se não aplicável)',
+        variante:'Apresentação física: Garrafa 600ml, Lata 350ml, Galão 20L… (vazio se não aplicável)',
         unidade_estoque:'KG|UN|L|ML',
-        cnpj_fornecedor:'00000000000000',
-        codigo_produto_nf:'codigo',
+        cnpj_fornecedor:'00000000000000 (omita se for atualização sem NF-e)',
+        codigo_produto_nf:'codigo (omita se for atualização sem NF-e)',
         ean:'codigo de barras (se souber)',
         confianca:'ALTA|MEDIA|BAIXA',
         confianca_motivo:'Explique brevemente',

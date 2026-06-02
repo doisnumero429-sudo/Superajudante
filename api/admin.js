@@ -490,9 +490,10 @@ function validarCatalogo(j) {
   if (embs === null) erros.push('"embalagens_confirmadas" deve ser um array.');
 
   (produtos || []).forEach((p, i) => {
+    const ehAtualizacao = !!String(p.id_produto || '').trim();
     if (!String(p.nome_interno || p.produto_interno || '').trim()) erros.push(`Produto #${i + 1}: falta nome_interno (ou produto_interno).`);
-    if (!String(p.categoria || p.categoria_id || '').trim()) erros.push(`Produto #${i + 1}: falta categoria.`);
-    if (!String(p.unidade_estoque || p.unidade_base || '').trim()) erros.push(`Produto #${i + 1}: falta unidade base.`);
+    if (!ehAtualizacao && !String(p.categoria || p.categoria_id || '').trim()) erros.push(`Produto #${i + 1}: falta categoria.`);
+    if (!ehAtualizacao && !String(p.unidade_estoque || p.unidade_base || '').trim()) erros.push(`Produto #${i + 1}: falta unidade base.`);
   });
   (embs || []).forEach((e, i) => {
     if (!(parseFloat(e.fator) > 0)) erros.push(`Embalagem #${i + 1}: fator deve ser maior que zero.`);
@@ -577,7 +578,7 @@ async function treinoImportar(req, res) {
 
     if (alvo) {
       const jaConfirmado = String(alvo.confirmado || 'NAO').toUpperCase() === 'SIM';
-      if (jaConfirmado && !substituir) {
+      if (jaConfirmado && !substituir && !p.id_produto) {
         relatorio.conflitos.push({ id_produto: alvo.id_produto, nome_interno: alvo.nome_interno, motivo: 'Produto ja confirmado.' });
         registrarIdPorChave(idPorChave, p, alvo.id_produto);
         continue;
@@ -963,11 +964,9 @@ async function treinoFilaPacote(req, res) {
         nome_categoria: c.nome_categoria,
         subcategorias: [...(subcatsPorCat[c.id_categoria] || [])].sort((a, b) => a.localeCompare(b, 'pt-BR')),
       })),
-    produtos_confirmados_amostra: ativos
-      .filter((p) => String(p.confirmado || 'NAO').toUpperCase() === 'SIM')
+    todos_produtos: ativos
       .sort((a, b) => (a.nome_interno || '').localeCompare(b.nome_interno || '', 'pt-BR'))
-      .slice(0, 40)
-      .map((p) => ({ nome_interno: p.nome_interno, categoria_id: p.categoria_id, subcategoria: p.subcategoria || '', variante: p.variante || '', unidade_estoque: p.unidade_estoque })),
+      .map((p) => ({ id_produto: p.id_produto, nome_interno: p.nome_interno, categoria_id: p.categoria_id, subcategoria: p.subcategoria || '', variante: p.variante || '', unidade_estoque: p.unidade_estoque })),
     fornecedores: fornecedores
       .sort((a, b) => (a.razao_social || '').localeCompare(b.razao_social || '', 'pt-BR'))
       .map((f) => ({ cnpj: f.cnpj, razao_social: f.razao_social })),

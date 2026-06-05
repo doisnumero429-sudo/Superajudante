@@ -1,27 +1,33 @@
 // api/dashboard.js
-import { readRows } from './_lib/db.js';
+import { readRows, readConfig } from './_lib/db.js';
 import { json, preflight } from './_lib/util.js';
 
 export default async function handler(req, res) {
   if (preflight(req, res)) return;
   try {
-    const [produtos, notas, contas, movs] = await Promise.all([
+    const semanaOffset = parseInt(((req.query) || {}).semana_offset || '0', 10) || 0;
+
+    const [produtos, notas, contas, movs, fornecedores, config] = await Promise.all([
       readRows('Produtos'), readRows('Notas_Fiscais'),
       readRows('Contas_Pagar'), readRows('Movimentacoes_Estoque'),
+      readRows('Fornecedores'), readConfig(),
     ]);
 
     const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
     const ymAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
     const d7 = new Date(hoje); d7.setDate(d7.getDate() + 7);
 
+    // ── Produtos ──────────────────────────────────────────────────────────────
     const ativos = produtos.filter((p) => String(p.ativo).toUpperCase() === 'SIM');
     const estoqueBaixo = ativos.filter((p) =>
-      p.estoque_minimo !== '' && parseFloat(p.estoque_atual) <= parseFloat(p.estoque_minimo));
+      parseFloat(p.estoque_minimo) > 0 && parseFloat(p.estoque_atual) <= parseFloat(p.estoque_minimo));
     const valorEstoque = ativos.reduce((s, p) =>
       s + (parseFloat(p.estoque_atual || 0) * parseFloat(p.custo_medio || 0)), 0);
 
+    // ── Notas do mês ──────────────────────────────────────────────────────────
     const notasMes = notas.filter((n) => String(n.data_emissao).startsWith(ymAtual));
 
+    // ── Contas ────────────────────────────────────────────────────────────────
     const parseData = (s) => { const d = new Date(s); return isNaN(d) ? null : d; };
     const abertas = contas.filter((c) => String(c.status).toUpperCase() === 'ABERTO');
     const vencidas = abertas.filter((c) => { const v = parseData(c.vencimento); return v && v < hoje; });
@@ -30,7 +36,7 @@ export default async function handler(req, res) {
     const totalAberto = abertas.reduce((s, c) => s + parseFloat(c.valor || 0), 0);
     const pendentes = contas.filter((c) => String(c.status).toUpperCase() === 'PENDENTE_INFO');
 
-    // Consumo dos ultimos 30 dias: soma das SAIDAs por produto.
+    // ── Consumo 30 dias ───────────────────────────────────────────────────────
     const corte = new Date(hoje); corte.setDate(corte.getDate() - 30);
     const corteStr = `${corte.getFullYear()}-${String(corte.getMonth() + 1).padStart(2, '0')}-${String(corte.getDate()).padStart(2, '0')}`;
     const nomeProd = Object.fromEntries(produtos.map((p) => [p.id_produto, p.nome_interno || p.descricao_original_nf]));
@@ -47,7 +53,48 @@ export default async function handler(req, res) {
       .sort((a, b) => b.quantidade - a.quantidade)
       .slice(0, 5);
 
+    // ── Central da Cris: limite semanal de compras ────────────────────────────
+    const pad = (n) => String(n).padStart(2, '0');
+    const fmtISO = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+    const limite = parseFloat(config.LIMITE_SEMANAL_COMPRAS || '30000') || 30000;
+
+    // Semana começa na segunda-feira (ISO week)
+    const inicioSemana = new Date(hoje);
+    const diaSemana = hoje.getDay(); // 0=Dom, 1=Seg…
+    const diffSeg = diaSemana === 0 ? -6 : 1 - diaSemana;
+    inicioSemana.setDate(hoje.getDate() + diffSeg + semanaOffset * 7);
+    const fimSemana = new Date(inicioSemana);
+    fimSemana.setDate(inicioSemana.getDate() + 6);
+
+    const inicioStr = fmtISO(inicioSemana);
+    const fimStr = fmtISO(fimSemana);
+
+    const fornMap = Object.fromEntries(
+      fornecedores.map((f) => [f.id_fornecedor, f.nome_fantasia || f.razao_social || f.cnpj])
+    );
+
+    const notasSemana = notas
+      .filter((n) => {
+        const dt = String(n.data_entrada || '').slice(0, 10);
+        return dt >= inicioStr && dt <= fimStr
+          && String(n.status_importacao || '').toUpperCase() === 'LANCADA';
+      })
+      .map((n) => ({
+        id_nota: n.id_nota,
+        numero_nota: n.numero_nota,
+        fornecedor_nome: fornMap[n.fornecedor_id] || n.cnpj_fornecedor || '—',
+        data_entrada: n.data_entrada,
+        valor_total_nota: Number(parseFloat(n.valor_total_nota || 0).toFixed(2)),
+      }))
+      .sort((a, b) => String(b.data_entrada).localeCompare(String(a.data_entrada)));
+
+    const gastoSemana = notasSemana.reduce((s, n) => s + n.valor_total_nota, 0);
+    const disponivelSemana = limite - gastoSemana;
+    const percentualSemana = limite > 0 ? (gastoSemana / limite) * 100 : 0;
+
     return json(res, 200, {
+      // ── Campos existentes (sem alteração) ───────────────────────────────────
       produtos_cadastrados: ativos.length,
       produtos_estoque_baixo: estoqueBaixo.length,
       valor_estimado_estoque: Number(valorEstoque.toFixed(2)),
@@ -62,6 +109,14 @@ export default async function handler(req, res) {
       lista_estoque_baixo: estoqueBaixo.map((p) => ({
         nome: p.nome_interno, estoque: p.estoque_atual, minimo: p.estoque_minimo,
       })),
+      // ── Central da Cris ─────────────────────────────────────────────────────
+      limite_semanal: limite,
+      gasto_semana: Number(gastoSemana.toFixed(2)),
+      disponivel_semana: Number(disponivelSemana.toFixed(2)),
+      percentual_semana: Number(percentualSemana.toFixed(1)),
+      periodo_inicio: inicioStr,
+      periodo_fim: fimStr,
+      notas_semana: notasSemana,
     });
   } catch (e) {
     return json(res, 500, { erro: e.message });

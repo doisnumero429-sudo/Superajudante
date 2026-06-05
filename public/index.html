@@ -99,6 +99,9 @@ nav svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8}
 .toast.err{border-color:#fecaca;color:#b91c1c}
 .toast.ok{border-color:#bfdbfe;color:var(--accent-d)}
 hr{border:none;border-top:1px solid var(--line);margin:16px 0}
+.progress-bar-wrap{background:var(--surface2);border-radius:8px;overflow:hidden;height:10px;margin:10px 0}
+.progress-bar{height:100%;border-radius:8px;transition:width .6s ease}
+.progress-ok{background:var(--accent)} .progress-warn{background:var(--warn)} .progress-danger{background:var(--danger)}
 </style>
 </head>
 <body>
@@ -483,6 +486,11 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
   </div>
 </section>
 
+<!-- CENTRAL DA CRIS -->
+<section class="view" id="v-cris">
+  <div id="cris-content"><div class="empty">Carregando…</div></div>
+</section>
+
 </main>
 
 <nav>
@@ -496,6 +504,8 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg>Contas</button>
   <button data-v="config" onclick="nav('config')">
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Config</button>
+  <button data-v="cris" onclick="nav('cris')">
+    <svg viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>Cris</button>
 </nav>
 </div>
 <div class="toast" id="toast"></div>
@@ -503,6 +513,7 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
 <script>
 const API = window.Capacitor?.isNativePlatform?.() ? 'https://superajudante.vercel.app' : '';
 let confData = null, estoqueCache = [], _activeScan = null;
+let crisSemanaOffset = 0;
 
 function toast(msg, type=''){
   const t = document.getElementById('toast');
@@ -535,7 +546,8 @@ const hojeISO = () => { const d=new Date(); const p=n=>String(n).padStart(2,'0')
 const TITLES = {dash:['Painel','Visão geral'],import:['Entrada de NF-e','Confirmar compra'],treino:['Esteira de Treinamento','Treinar produtos'],conf:['Conferência','Revisar antes de lançar'],
   estoque:['Estoque','Produtos'],produto:['Produto','Editar cadastro'],entrada:['Entrada manual','Sem nota fiscal'],saida:['Saída','Baixa de estoque'],
   inv:['Inventário','Contagem'],contas:['Contas a pagar','Financeiro'],config:['Configurações','Ajustes e categorias'],
-  auditoria:['Auditoria do Cadastro','Detectar inconsistências']};
+  auditoria:['Auditoria do Cadastro','Detectar inconsistências'],
+  cris:['Central da Cris','Compras e pagamentos']};
 
 function nav(v){
   _stopActiveScan();
@@ -551,6 +563,7 @@ function nav(v){
   if(v==='entrada') loadEntrada();
   if(v==='config') loadConfig();
   if(v==='auditoria') loadAuditoria();
+  if(v==='cris') loadCris();
   window.scrollTo(0,0);
 }
 
@@ -1835,7 +1848,8 @@ async function rodarDiagnostico(){
 function rotuloConfig(k){
   return {CNPJ_RESTAURANTE:'CNPJ do restaurante',NOME_RESTAURANTE:'Nome do restaurante',
     MAX_TENTATIVAS_NFE:'Máx. tentativas por NF-e',
-    INTERVALO_TENTATIVAS_MS:'Intervalo entre tentativas (ms)',LIMITE_CONSULTAS_SEGUNDO:'Consultas por segundo'}[k]||k;
+    INTERVALO_TENTATIVAS_MS:'Intervalo entre tentativas (ms)',LIMITE_CONSULTAS_SEGUNDO:'Consultas por segundo',
+    LIMITE_SEMANAL_COMPRAS:'Limite semanal de compras (R$)'}[k]||k;
 }
 async function loadAuditoria(){
   const el = document.getElementById('auditoria-content');
@@ -2429,6 +2443,103 @@ async function importarTreino(substituir, jsonId='treino-json', boxId='treino-re
     const erros = e.data?.erros;
     if(box) box.innerHTML = `<div class="alertbar">${e.message}${erros?'<br>• '+erros.join('<br>• '):''}</div>`;
   }
+}
+
+/* CENTRAL DA CRIS */
+async function loadCris(offset){
+  if(offset!==undefined) crisSemanaOffset=Number(offset);
+  const el=document.getElementById('cris-content');
+  if(!el) return;
+  el.innerHTML='<div class="empty">Carregando…</div>';
+  try{
+    const d=await api('/api/dashboard?semana_offset='+crisSemanaOffset);
+    renderCris(d);
+  }catch(e){ el.innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
+}
+
+function renderCris(d){
+  const el=document.getElementById('cris-content');
+  if(!el) return;
+  const limite=d.limite_semanal||30000;
+  const gasto=d.gasto_semana||0;
+  const disponivel=d.disponivel_semana!=null?d.disponivel_semana:(limite-gasto);
+  const pct=Math.min(100,d.percentual_semana||0);
+  const barClass=pct>=90?'progress-danger':pct>=65?'progress-warn':'progress-ok';
+  const isCurrentWeek=crisSemanaOffset===0;
+  const periodoIni=fmtData(d.periodo_inicio);
+  const periodoFim=fmtData(d.periodo_fim);
+  const abs=Math.abs(crisSemanaOffset);
+  const periodoLabel=isCurrentWeek?'Semana atual':`${abs} semana${abs>1?'s':''} atrás`;
+  const limiteCor=pct>=90?'var(--danger)':pct>=65?'var(--warn)':'var(--accent)';
+  let html='';
+
+  // Navegador de período
+  html+=`<div class="card" style="padding:12px 14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <button class="btn-2 btn-sm" style="padding:8px 14px" onclick="loadCris(${crisSemanaOffset-1})">‹ Anterior</button>
+      <div style="text-align:center;flex:1">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px">${periodoLabel}</div>
+        <div style="font-size:13px;font-weight:600">${periodoIni} – ${periodoFim}</div>
+      </div>
+      <button class="btn-2 btn-sm" style="padding:8px 14px${isCurrentWeek?';opacity:.4;pointer-events:none':''}" onclick="loadCris(${crisSemanaOffset+1})"${isCurrentWeek?' disabled':''}>Próxima ›</button>
+    </div>
+  </div>`;
+
+  // Barra de limite
+  html+=`<div class="card">
+    <div class="sec-title" style="margin:0 0 10px">Limite semanal de compras</div>
+    <div style="display:flex;justify-content:space-between;align-items:baseline">
+      <div>
+        <div class="muted small">Gasto no período</div>
+        <div style="font-family:'Fraunces',serif;font-size:30px;font-weight:700;line-height:1.1">${brl(gasto)}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="muted small">Limite</div>
+        <div style="font-size:15px;font-weight:600;color:var(--muted)">${brl(limite)}</div>
+      </div>
+    </div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar ${barClass}" style="width:${pct.toFixed(1)}%"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+      <div class="muted small">${pct.toFixed(1)}% utilizado</div>
+      <div style="font-size:13px;font-weight:700;color:${limiteCor}">${disponivel>=0?brl(disponivel)+' disponível':'⚠ '+brl(Math.abs(disponivel))+' acima do limite'}</div>
+    </div>
+  </div>`;
+
+  // Resumo de contas
+  html+=`<div class="grid" style="margin-bottom:14px">
+    <div class="stat${d.contas_vencidas>0?' alert':''}" style="cursor:pointer" onclick="navContas('vencidas')"><div class="n">${d.contas_vencidas}</div><div class="l">Contas vencidas ›</div></div>
+    <div class="stat${d.contas_vencendo_7dias>0?' warn':''}" style="cursor:pointer" onclick="navContas('7dias')"><div class="n">${d.contas_vencendo_7dias}</div><div class="l">Vencem em 7 dias ›</div></div>
+    <div class="stat" style="grid-column:span 2"><div class="n" style="font-size:22px">${brl(d.total_em_aberto)}</div><div class="l">Total em aberto</div></div>
+  </div>`;
+
+  // Notas do período
+  const notas=d.notas_semana||[];
+  html+=`<div class="sec-title">Notas ${isCurrentWeek?'desta semana':'do período'} (${notas.length})</div>`;
+  if(notas.length){
+    html+=`<div class="card">`+notas.map(n=>`<div class="list-row">
+      <div style="flex:1;min-width:0">
+        <div class="t" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(n.fornecedor_nome||'—')}</div>
+        <div class="s">NF ${esc(n.numero_nota||'—')} · ${fmtData(n.data_entrada)}</div>
+      </div>
+      <div class="v">${brl(n.valor_total_nota)}</div>
+    </div>`).join('')+`</div>`;
+  } else {
+    html+=`<div class="card"><div class="muted small">Nenhuma nota lançada neste período.</div></div>`;
+  }
+
+  // Atalhos
+  html+=`<div class="sec-title">Acesso rápido</div>
+  <div class="card">
+    <div class="row" style="gap:8px">
+      <button class="btn-2" style="flex:1;padding:12px;font-size:13px" onclick="nav('import')">📄 Entrada NF-e</button>
+      <button class="btn-2" style="flex:1;padding:12px;font-size:13px" onclick="nav('contas')">💳 Contas a pagar</button>
+    </div>
+    <button class="btn-2" style="width:100%;padding:12px;font-size:13px;margin-top:8px" onclick="nav('estoque')">📦 Estoque</button>
+  </div>`;
+
+  el.innerHTML=html;
 }
 
 loadDash();

@@ -71,12 +71,14 @@ export default async function handler(req, res) {
 
 // ---------- helpers ----------
 // Acha uma categoria por nome (ou cria) e devolve o id.
+const semAcento = (s) => String(s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
 async function garantirCategoria(nome, cache) {
   const n = String(nome || '').trim();
   if (!n) return '';
   const cats = cache || await readRows('Categorias');
   const achado = cats.find((c) =>
-    String(c.nome_categoria || '').trim().toLowerCase() === n.toLowerCase()
+    semAcento(c.nome_categoria) === semAcento(n)
     && String(c.ativo || 'SIM').toUpperCase() === 'SIM');
   if (achado) return achado.id_categoria;
   const id = await nextId('Categorias', 'id_categoria', 'CAT');

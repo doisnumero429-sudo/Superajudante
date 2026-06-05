@@ -589,6 +589,9 @@ async function treinoImportar(req, res) {
         categoria_id: categoriaId || alvo.categoria_id,
         subcategoria: p.subcategoria || alvo.subcategoria || '',
         unidade_estoque: unidade || alvo.unidade_estoque,
+        // Preenche cnpj_fornecedor e codigo_produto_nf somente se ainda estiverem vazios
+        cnpj_fornecedor: String(alvo.cnpj_fornecedor || '').replace(/\D/g, '') || cnpj || '',
+        codigo_produto_nf: alvo.codigo_produto_nf || codigo || '',
         confirmado, atualizado_em: agora,
       });
       relatorio.produtos_atualizados += 1;

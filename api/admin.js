@@ -21,7 +21,7 @@
 //   recurso=produto-reativar      POST { id_produto } -> reativa produto inativo
 //   recurso=auditoria-cadastro    GET  -> detecta inconsistencias (sem categoria, duplicados, sem embalagem)
 
-import { readRows, appendRow, updateRow, nextId, readConfig, deleteAllRows, deleteRow, deleteRowsWhere } from './_lib/db.js';
+import { readRows, appendRow, appendRows, updateRow, nextId, makeIdGen, readConfig, deleteAllRows, deleteRow, deleteRowsWhere } from './_lib/db.js';
 import { normalizarDesc, parseNfe } from './_lib/parser.js';
 import { entradaEstoque } from './_lib/estoque.js';
 import { encontrarProduto } from './_lib/reconhecimento.js';
@@ -527,6 +527,8 @@ async function treinoValidar(req, res) {
 }
 
 // ---------- TREINAMENTO: IMPORTAR (aditivo) ----------
+// Usa operações em lote para evitar timeout no Vercel quando o JSON tem muitos produtos.
+// Estratégia: coleta todas as inserções/atualizações em memória, depois executa em paralelo.
 async function treinoImportar(req, res) {
   if (req.method !== 'POST') return json(res, 405, { erro: 'Metodo nao permitido' });
   const b = await readBody(req);
@@ -547,12 +549,25 @@ async function treinoImportar(req, res) {
     categoria_id_invalida: [],
   };
 
-  const produtos = await readRows('Produtos');
-  const cats = await readRows('Categorias');
-  const pfTodos = await readRows('Produto_Fornecedor');
-  const embsTodas = await readRows('Embalagens');
+  // Busca dados e geradores de ID em paralelo (reduz de ~5 chamadas sequenciais para 1 round-trip)
+  const [[produtos, cats, pfTodos, embsTodas], [genPrd, genEmb, genPf, genAl, genTi]] = await Promise.all([
+    Promise.all([readRows('Produtos'), readRows('Categorias'), readRows('Produto_Fornecedor'), readRows('Embalagens')]),
+    Promise.all([
+      makeIdGen('Produtos', 'id_produto', 'PRD'),
+      makeIdGen('Embalagens', 'id_embalagem', 'EMB'),
+      makeIdGen('Produto_Fornecedor', 'id_pf', 'PF'),
+      makeIdGen('Aliases_Produto', 'id_alias', 'AL'),
+      makeIdGen('Treino_Importacoes', 'id_importacao', 'TI'),
+    ]),
+  ]);
 
-  // mapa "chave/nome do produto no JSON" -> id_produto real (multiplas chaves por produto)
+  // Coletores para operações em lote
+  const novosProdutos = [];
+  const novasEmbalagens = [];
+  const novosMapeamentos = [];
+  const novosAliases = [];
+  const updatesProdutos = []; // { id, data }
+
   const idPorChave = {};
 
   for (const p of (j.produtos_confirmados || [])) {
@@ -561,6 +576,7 @@ async function treinoImportar(req, res) {
       relatorio.conflitos.push({ nome_interno: '?', motivo: 'nome_interno ausente no JSON.' });
       continue;
     }
+    // resolverCategoria pode criar categorias novas; categorias são poucas, custo OK
     const categoriaId = await resolverCategoria(p, cats);
     if (p.categoria_id && !categoriaId) {
       relatorio.categoria_id_invalida.push({ nome_interno: nome, categoria_id_recebida: p.categoria_id });
@@ -584,21 +600,23 @@ async function treinoImportar(req, res) {
         registrarIdPorChave(idPorChave, p, alvo.id_produto);
         continue;
       }
-      await updateRow('Produtos', alvo.id_produto, {
-        ...alvo, nome_interno: nome || alvo.nome_interno,
-        categoria_id: categoriaId || alvo.categoria_id,
-        subcategoria: p.subcategoria || alvo.subcategoria || '',
-        variante: p.variante || alvo.variante || '',
-        unidade_estoque: unidade || alvo.unidade_estoque,
-        // Preenche cnpj_fornecedor e codigo_produto_nf somente se ainda estiverem vazios
-        cnpj_fornecedor: String(alvo.cnpj_fornecedor || '').replace(/\D/g, '') || cnpj || '',
-        codigo_produto_nf: alvo.codigo_produto_nf || codigo || '',
-        confirmado, atualizado_em: agora,
+      updatesProdutos.push({
+        id: alvo.id_produto,
+        data: {
+          ...alvo, nome_interno: nome || alvo.nome_interno,
+          categoria_id: categoriaId || alvo.categoria_id,
+          subcategoria: p.subcategoria || alvo.subcategoria || '',
+          variante: p.variante || alvo.variante || '',
+          unidade_estoque: unidade || alvo.unidade_estoque,
+          cnpj_fornecedor: String(alvo.cnpj_fornecedor || '').replace(/\D/g, '') || cnpj || '',
+          codigo_produto_nf: alvo.codigo_produto_nf || codigo || '',
+          confirmado, atualizado_em: agora,
+        },
       });
       relatorio.produtos_atualizados += 1;
       registrarIdPorChave(idPorChave, p, alvo.id_produto);
     } else {
-      const id = await nextId('Produtos', 'id_produto', 'PRD');
+      const id = genPrd();
       const novo = {
         id_produto: id, cnpj_fornecedor: cnpj, codigo_produto_nf: codigo,
         codigo_barras: p.ean || '', descricao_original_nf: p.descricao_original_nfe || nome,
@@ -612,27 +630,49 @@ async function treinoImportar(req, res) {
         ultimo_custo_unitario: 0, custo_medio: 0, ativo: 'SIM', confirmado,
         observacoes: '', criado_em: agora, atualizado_em: agora,
       };
-      await appendRow('Produtos', novo);
+      novosProdutos.push(novo);
       produtos.push(novo);
       relatorio.produtos_criados += 1;
       registrarIdPorChave(idPorChave, p, id);
 
-      // Auto-cria embalagem base (fator 1) para o produto novo se ainda nao houver
+      // Embalagem base (fator 1) para produto novo
       const jaTemEmb = embsTodas.some((e) => e.id_produto === id && String(e.ativo || 'SIM').toUpperCase() === 'SIM');
       if (!jaTemEmb) {
-        await garantirEmbalagem(id, { fator: 1, sigla: unidade, unidade_base: unidade, descricao: `${unidade} x1` }, embsTodas);
+        const novaEmb = {
+          id_embalagem: genEmb(), id_produto: id,
+          descricao: `${unidade} x1`, sigla: unidade, fator: 1, unidade_base: unidade,
+          permite_entrada: 'SIM', permite_saida: 'SIM', permite_inventario: 'SIM',
+          padrao_entrada: 'NAO', padrao_saida: 'NAO', padrao_inventario: 'NAO',
+          ativo: 'SIM', criado_em: agora, atualizado_em: agora,
+        };
+        novasEmbalagens.push(novaEmb);
+        embsTodas.push(novaEmb);
         relatorio.embalagens_criadas += 1;
       }
     }
   }
 
-  // embalagens (vindas do JSON do ChatGPT)
+  // embalagens do JSON do ChatGPT
   for (const e of (j.embalagens_confirmadas || [])) {
     const idp = resolverIdProduto(e, idPorChave);
     if (!idp) continue;
-    const antes = embsTodas.length;
-    await garantirEmbalagem(idp, e, embsTodas);
-    if (embsTodas.length > antes) relatorio.embalagens_criadas += 1;
+    const fator = parseFloat(e.fator) || 1;
+    const desc = String(e.descricao || '').trim() || `${e.sigla || 'EMB'} x${fator}`;
+    const achado = embsTodas.find((x) => x.id_produto === idp
+      && String(x.descricao || '').trim().toLowerCase() === desc.toLowerCase()
+      && String(x.ativo || 'SIM').toUpperCase() === 'SIM');
+    if (achado) continue;
+    const novaEmb = {
+      id_embalagem: genEmb(), id_produto: idp,
+      descricao: desc, sigla: String(e.sigla || '').trim().toUpperCase(),
+      fator, unidade_base: String(e.unidade_base || 'UN').trim().toUpperCase(),
+      permite_entrada: 'SIM', permite_saida: 'SIM', permite_inventario: 'SIM',
+      padrao_entrada: 'NAO', padrao_saida: 'NAO', padrao_inventario: 'NAO',
+      ativo: 'SIM', criado_em: agora, atualizado_em: agora,
+    };
+    novasEmbalagens.push(novaEmb);
+    embsTodas.push(novaEmb);
+    relatorio.embalagens_criadas += 1;
   }
 
   // mapeamentos fornecedor/produto
@@ -645,7 +685,6 @@ async function treinoImportar(req, res) {
     const cnpj = String(m.cnpj_fornecedor || '').replace(/\D/g, '');
     const codigo = String(m.codigo_produto_nf || m.codigo_produto_fornecedor || '');
 
-    // Detecta conflito: mesmo CNPJ+codigo ja mapeado para produto DIFERENTE
     const conflito = pfTodos.find((x) =>
       String(x.cnpj_fornecedor).replace(/\D/g, '') === cnpj && String(x.codigo_produto_nf) === codigo
       && x.id_produto !== idp && String(x.ativo || 'SIM').toUpperCase() === 'SIM');
@@ -658,15 +697,14 @@ async function treinoImportar(req, res) {
     const existe = pfTodos.find((x) => x.id_produto === idp
       && String(x.cnpj_fornecedor).replace(/\D/g, '') === cnpj && String(x.codigo_produto_nf) === codigo);
     if (existe) continue;
-    const id = await nextId('Produto_Fornecedor', 'id_pf', 'PF');
     const nova = {
-      id_pf: id, id_produto: idp, cnpj_fornecedor: cnpj, nome_fornecedor: m.nome_fornecedor || '',
+      id_pf: genPf(), id_produto: idp, cnpj_fornecedor: cnpj, nome_fornecedor: m.nome_fornecedor || '',
       codigo_produto_nf: codigo, ean: m.ean || '', descricao_original: m.descricao_original || '',
       descricao_normalizada: normalizarDesc(m.descricao_original || m.descricao_normalizada || ''),
       unidade_nf: m.unidade_nf || '', confirmado_pelo_usuario: 'SIM', origem_confirmacao: 'CHATGPT',
       vezes_utilizado: 0, ultima_utilizacao: '', ativo: 'SIM', criado_em: agora, atualizado_em: agora,
     };
-    await appendRow('Produto_Fornecedor', nova);
+    novosMapeamentos.push(nova);
     pfTodos.push(nova);
     relatorio.mapeamentos_criados += 1;
   }
@@ -683,18 +721,25 @@ async function treinoImportar(req, res) {
       relatorio.aliases_sem_produto.push({ alias: '?', id_produto: idp, motivo: 'Campo alias vazio.' });
       continue;
     }
-    const id = await nextId('Aliases_Produto', 'id_alias', 'AL');
-    await appendRow('Aliases_Produto', {
-      id_alias: id, id_produto: idp, alias, origem: a.origem || 'CHATGPT', ativo: 'SIM', criado_em: agora,
+    novosAliases.push({
+      id_alias: genAl(), id_produto: idp, alias, origem: a.origem || 'CHATGPT', ativo: 'SIM', criado_em: agora,
     });
     relatorio.aliases_criados += 1;
   }
 
+  // Executa todas as operações em paralelo: atualizações + inserções em lote
+  await Promise.all([
+    ...updatesProdutos.map(({ id, data }) => updateRow('Produtos', id, data)),
+    appendRows('Produtos', novosProdutos),
+    appendRows('Embalagens', novasEmbalagens),
+    appendRows('Produto_Fornecedor', novosMapeamentos),
+    appendRows('Aliases_Produto', novosAliases),
+  ]);
+
   // auditoria (best-effort)
   try {
-    const idImp = await nextId('Treino_Importacoes', 'id_importacao', 'TI');
     await appendRow('Treino_Importacoes', {
-      id_importacao: idImp, criado_em: agora, origem: j.origem || 'chatgpt',
+      id_importacao: genTi(), criado_em: agora, origem: j.origem || 'chatgpt',
       resumo: `prod+${relatorio.produtos_criados}/upd${relatorio.produtos_atualizados} map+${relatorio.mapeamentos_criados} emb+${relatorio.embalagens_criadas} ali+${relatorio.aliases_criados} conf=${relatorio.conflitos.length}`,
       json_original: JSON.stringify(j).slice(0, 45000),
       status: relatorio.conflitos.length ? 'COM_CONFLITOS' : 'OK',

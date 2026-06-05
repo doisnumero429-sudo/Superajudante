@@ -103,3 +103,32 @@ export async function deleteRowsWhere(sheetName, field, value) {
   const { error } = await getClient().from(meta.table).delete().eq(field, value);
   if (error) throw new Error(error.message);
 }
+
+// Batch insert — significantly faster than multiple appendRow calls.
+export async function appendRows(sheetName, objs) {
+  if (!objs || objs.length === 0) return;
+  const meta = TABLES[sheetName];
+  if (!meta) throw new Error(`Tabela desconhecida: ${sheetName}`);
+  const { error } = await getClient().from(meta.table).insert(objs);
+  if (error) throw new Error(error.message);
+}
+
+// Fetches the current max ID once and returns a sync counter factory.
+// Use when you need to generate many IDs without per-call DB round-trips.
+export async function makeIdGen(sheetName, idField, prefix) {
+  const meta = TABLES[sheetName];
+  if (!meta) throw new Error(`Tabela desconhecida: ${sheetName}`);
+  const { data, error } = await getClient()
+    .from(meta.table)
+    .select(idField)
+    .like(idField, `${prefix}-%`)
+    .order(idField, { ascending: false })
+    .limit(1);
+  if (error) throw new Error(error.message);
+  let max = 0;
+  if (data?.[0]?.[idField]) {
+    const m = String(data[0][idField]).match(/(\d+)$/);
+    if (m) max = parseInt(m[1], 10);
+  }
+  return () => `${prefix}-${String(++max).padStart(4, '0')}`;
+}

@@ -438,57 +438,104 @@ O arquivo .txt gerado pelo app tem 13 seções numeradas. As seções dinâmicas
 
 ## 13. Embalagens e Fatores
 
-### Padrões reconhecíveis automaticamente (confianca ALTA)
+### Conceito importante
+
+> **`qCom` na NF-e** = quantas embalagens o restaurante comprou — **NÃO é o fator**.
+> **Fator** = quantas unidades há dentro de cada embalagem.
+> Exemplo: comprou 2 CX → `qCom=2`, mas `fator=24` (24 garrafas por caixa).
+
+### Hierarquia de evidências
+
+| Nível | Origem da evidência | confianca |
+|---|---|---|
+| Fator explícito na descrição do NF-e | `CX24`, `6X5KG`, `DZ`… | **ALTA** |
+| Confirmado em site de atacado/fabricante | Makro, Atacadão, iFood Shop, Open Food Facts | **MEDIA** |
+| Padrão de mercado consolidado no Brasil | ver tabela abaixo | **MEDIA** |
+| Desconhecido após pesquisa real | nenhuma evidência encontrada | **BAIXA** → `itens_com_duvida` |
+
+### Padrões ALTA (explícito no NF-e)
 
 | Padrão na NF-e | Interpretação | Fator | Base |
 |---|---|---|---|
 | `CX24`, `CX12`, `CX6` | Caixa com N unidades | N | UN |
-| `6X5KG`, `4X1,8KG` | Fardo N×M: fator = N×M | N×M | KG |
+| `6X5KG`, `4X1,8KG` | Fardo N×M | N×M | KG |
 | `DZ` | Dúzia | 12 | UN |
-| `GFA` | Garrafa unitária | 1 | UN |
-| `L`, `KG`, `UN` | Unidade base | 1 | respectiva |
+| `GFA`, `UN`, `KG`, `L` | Unitário | 1 | respectiva |
 
-### Padrões que exigem dúvida (confianca MEDIA ou BAIXA)
+### Padrões de mercado MEDIA (consolidados no Brasil)
+
+| Produto | Embalagem padrão | Fator |
+|---|---|---|
+| Cerveja long neck 330–355ml | CX24 | 24 |
+| Cerveja garrafa 600ml | CX12 | 12 |
+| Cerveja lata 350ml | CX12 | 12 |
+| Refrigerante lata 350ml | CX12 | 12 |
+| Água mineral 500ml | CX12 ou CX24 | 12 ou 24 |
+| Vinho garrafa 750ml | CX12 | 12 |
+| Red Bull / energético 250ml | CX24 | 24 |
+| Dose/miniatura ≤100ml | CX24 ou CX48 | 24 ou 48 |
+
+### Protocolo de pesquisa para embalagem
+
+Quando o fator não está explícito no NF-e, execute nesta ordem:
+1. `"[marca] [produto] caixa unidades atacado"` no Google
+2. EAN no Makro, Atacadão, iFood Shop ou Carrefour
+3. Site oficial do fabricante → "embalagens" ou "apresentações"
+4. Open Food Facts → campos `quantity` e `packaging`
+
+Se encontrar: `confianca: "MEDIA"` + registrar fonte em `fonte_auxiliar`.
+Se não encontrar: `confianca: "BAIXA"` → `itens_com_duvida` (especifique o que pesquisou).
+
+### Padrões BAIXA → itens_com_duvida
 
 | Padrão | Problema |
 |---|---|
-| `FD` ou `FARDO` sem número | Fator desconhecido |
-| `PAC6`, `PCT6` | Pacote com 6 — mas de quantos kg cada? |
+| `FD`/`FARDO` sem número + sem padrão de mercado | Fator desconhecido |
 | `CX 6,8KG` | Peso total da caixa ou peso unitário? |
-| `8CXC192UN` | 8 caixas × 192 un = 1.536? |
-| `~`, `aprox` | Peso variável — fator: null, confianca MEDIA |
+| `8CXC192UN` e combinações atípicas | Sem evidência |
+| `~`, `aprox` | Peso variável — fator: null |
 
-### Produtos por KG — atenção especial
+### Produtos por KG
 
 ```
-"ARROZ TIPO 1 5KG"           → Pacote 5kg, fator 5, base KG
-"PIMENTA DO REINO 4X1,8KG"  → fardo 4 potes × 1,8kg = fator 7.2, base KG
-"QUEIJO MUSSARELA PEÇA ~3KG" → peso variável: fator null, confianca MEDIA
-"FRANGO INTEIRO CX 15KG"    → 1 frango ~15kg OU caixa com vários? → dúvida
-"OLEO SOJA 6X900ML"         → fardo 6 garrafas × 900ml, fator 5400, base ML
+"ARROZ TIPO 1 5KG"           → Pacote 5kg, fator 5, base KG         (ALTA)
+"PIMENTA DO REINO 4X1,8KG"  → fardo 4×1,8kg = fator 7.2, base KG   (ALTA)
+"QUEIJO MUSSARELA PEÇA ~3KG" → peso variável, fator null             (MEDIA)
+"FRANGO INTEIRO CX 15KG"    → pesquise: 1 frango ou caixa?          (MEDIA ou BAIXA)
+"OLEO SOJA 6X900ML"         → 6 garrafas × 900ml = 5400ml           (ALTA)
 ```
 
 ---
 
 ## 14. Pesquisa na Internet
 
-### Quando pesquisar
-- O nome da NF-e é ambíguo ou muito abreviado
-- O EAN está presente e você quer confirmar o produto exato
-- Não sabe a apresentação (lata? garrafa? sachê? pote?)
+Faça esforço real de pesquisa **antes** de colocar um item em `itens_com_duvida`.
+Pesquise tanto para **nome** quanto para **embalagem**.
 
-### Como pesquisar
+### Para nome do produto
+- Nome da NF-e ambíguo ou muito abreviado
+- EAN presente — confirme produto exato
+- Apresentação desconhecida (lata? garrafa? sachê? pote?)
+
+### Para embalagem e fator
+- Fator não explícito na descrição do NF-e
+- Produto com embalagem atípica ou desconhecida
+
+### Fontes recomendadas
 - EAN → Open Food Facts, Cosmos, Barcodelookup, Google
-- Produto → `"[fabricante] [descrição parcial]"` no Google
+- Embalagem → Makro, Atacadão, iFood Shop, Carrefour, site do fabricante
+- Produto → `"[fabricante] [descrição parcial] atacado"` no Google
 
-### O que a pesquisa confirma / nunca confirma
+### O que a pesquisa confirma / não confirma
 ✅ Nome comercial, marca, tipo, volume/peso, apresentação
-❌ Fator de embalagem da NF-e (pode ser embalagem customizada)
+✅ Embalagem padrão de mercado → `confianca: "MEDIA"`
+❌ Fator customizado específico desta NF-e
 ❌ Preço de custo
 ❌ Código do produto no fornecedor
 
 ### Como registrar
 ```json
+"fonte_auxiliar": "Makro — Cerveja Heineken CX12"
 "fonte_auxiliar": "Open Food Facts — EAN 7896045503852"
 ```
 
@@ -497,15 +544,15 @@ O arquivo .txt gerado pelo app tem 13 seções numeradas. As seções dinâmicas
 ## 15. O que NÃO fazer
 
 - ❌ Inventar CNPJ, EAN, código do produto ou preço de custo
-- ❌ Omitir `cnpj_fornecedor` ou `codigo_produto_nf` dos arrays de saída — esses campos já chegam preenchidos nos dados de entrada. Copie-os exatamente.
-- ❌ Inventar fator de embalagem sem evidência explícita na NF-e
+- ❌ Omitir `cnpj_fornecedor` ou `codigo_produto_nf` dos arrays de saída — copie-os exatamente dos dados de entrada
+- ❌ Confirmar fator de embalagem sem nenhuma evidência (NF-e ou pesquisa online) — se não há evidência: BAIXA → `itens_com_duvida`
+- ❌ Usar `itens_com_duvida` como atalho para evitar pesquisa — faça esforço real primeiro
 - ❌ Deixar `categoria` em branco — sempre preencher com a mais próxima
 - ❌ Usar `categoria_id` numérico — usar sempre o nome da categoria em texto
 - ❌ Criar fichas técnicas ou insumos para pratos, porções ou lanches
 - ❌ Vincular produto de estoque a produto de venda do cardápio
 - ❌ Usar preço de venda para inferir custo ou quantidade
 - ❌ Gerar JSON parcial — ou tem dados suficientes e gera completo, ou pergunta antes
-- ❌ Aceitar fator por internet sem evidência na NF-e
 
 ---
 

@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     // ── Produtos ──────────────────────────────────────────────────────────────
     const ativos = produtos.filter((p) => String(p.ativo).toUpperCase() === 'SIM');
     const estoqueBaixo = ativos.filter((p) =>
-      p.estoque_minimo !== '' && parseFloat(p.estoque_atual) <= parseFloat(p.estoque_minimo));
+      parseFloat(p.estoque_minimo) > 0 && parseFloat(p.estoque_atual) <= parseFloat(p.estoque_minimo));
     const valorEstoque = ativos.reduce((s, p) =>
       s + (parseFloat(p.estoque_atual || 0) * parseFloat(p.custo_medio || 0)), 0);
 

@@ -1010,15 +1010,21 @@ async function reprocessarAprendizado(req, res) {
   if (req.method !== 'POST') return json(res, 405, { erro: 'POST only' });
   const b = await readBody(req);
   const chaveReq = b.chave ? String(b.chave).replace(/\D/g, '') : null;
+  const xmlDireto = b.xml ? String(b.xml) : null;
   const agora = nowStr();
 
-  const notasFiscais = await readRows('Notas_Fiscais');
-  const notasParaProcessar = chaveReq
-    ? notasFiscais.filter((n) => String(n.chave_nfe).replace(/\D/g, '') === chaveReq)
-    : notasFiscais.filter((n) => String(n.xml_original || '').length > 100);
-
-  if (!notasParaProcessar.length) {
-    return json(res, 404, { erro: chaveReq ? 'NF-e não encontrada ou sem XML.' : 'Nenhuma nota com XML armazenado.' });
+  let notasParaProcessar;
+  if (xmlDireto) {
+    // XML enviado diretamente (arquivo local), sem precisar estar no banco
+    notasParaProcessar = [{ xml_original: xmlDireto, numero_nota: 'upload', chave_nfe: '' }];
+  } else {
+    const notasFiscais = await readRows('Notas_Fiscais');
+    notasParaProcessar = chaveReq
+      ? notasFiscais.filter((n) => String(n.chave_nfe).replace(/\D/g, '') === chaveReq)
+      : notasFiscais.filter((n) => String(n.xml_original || '').length > 100);
+    if (!notasParaProcessar.length) {
+      return json(res, 404, { erro: chaveReq ? 'NF-e não encontrada ou sem XML.' : 'Nenhuma nota com XML armazenado.' });
+    }
   }
 
   const [produtos, pfTodos, aliasRows, fornecedoresDB] = await Promise.all([

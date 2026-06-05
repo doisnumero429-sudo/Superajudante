@@ -142,7 +142,9 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <hr>
     <details>
       <summary class="muted small" style="cursor:pointer">Já tenho o arquivo XML</summary>
-      <label>Colar conteúdo do XML</label>
+      <input type="file" id="xml-file-input" accept=".xml,application/xml,text/xml" style="display:none" onchange="carregarXmlDeArquivo()">
+      <button class="btn-2" style="width:100%;padding:12px;margin-top:10px" onclick="document.getElementById('xml-file-input').click()">📁 Selecionar arquivo .xml</button>
+      <label style="margin-top:10px">Ou colar conteúdo do XML</label>
       <textarea id="xml-manual" rows="4" placeholder="<?xml version=..."></textarea>
       <button class="btn-2" style="width:100%;padding:13px;margin-top:10px" onclick="enviarXmlManual()">Importar deste XML</button>
     </details>
@@ -443,7 +445,14 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
   <div class="card">
     <p class="muted small" style="margin-bottom:10px">Relê o XML das notas já importadas, garante fornecedores no cadastro e reforça os mapeamentos produto-fornecedor. <b>Não altera estoque.</b></p>
     <p class="muted small" style="margin-bottom:12px;color:var(--warn)">⚠ Requer schema_fase6.sql executado no Supabase antes de usar pela 1ª vez.</p>
-    <button class="btn-2" style="width:100%;padding:12px" onclick="reprocessarTodasNotas()">🔄 Reprocessar todas as notas para aprendizado</button>
+    <button class="btn-2" style="width:100%;padding:12px" onclick="reprocessarTodasNotas()">🔄 Reprocessar notas já importadas no sistema</button>
+    <div style="display:flex;align-items:center;gap:8px;margin:12px 0">
+      <div style="flex:1;height:1px;background:var(--line)"></div>
+      <span class="muted small">ou envie arquivos direto</span>
+      <div style="flex:1;height:1px;background:var(--line)"></div>
+    </div>
+    <input type="file" id="xml-lote-input" accept=".xml,application/xml,text/xml" multiple style="display:none" onchange="processarXmlLote()">
+    <button class="btn-2" style="width:100%;padding:12px" onclick="document.getElementById('xml-lote-input').click()">📁 Selecionar XMLs para aprendizado (1 ou vários)</button>
     <div id="reprocessar-result" style="margin-top:10px"></div>
   </div>
 
@@ -689,6 +698,51 @@ async function enviarXmlManual(){
     if(e.status===409){ toast('Esta nota já foi importada.','err'); return; }
     toast(e.message,'err');
   }
+}
+
+async function carregarXmlDeArquivo(){
+  const file = document.getElementById('xml-file-input').files[0];
+  if(!file) return;
+  try{
+    const xml = await file.text();
+    document.getElementById('xml-manual').value = xml;
+    await enviarXmlManual();
+  }catch(e){ toast('Erro ao ler arquivo: ' + e.message, 'err'); }
+  document.getElementById('xml-file-input').value = '';
+}
+
+async function processarXmlLote(){
+  const files = Array.from(document.getElementById('xml-lote-input').files);
+  document.getElementById('xml-lote-input').value = '';
+  if(!files.length) return;
+  const el = document.getElementById('reprocessar-result');
+  const tot = {f:0, m:0, r:0, erros:[], pend:{}};
+  for(let i=0; i<files.length; i++){
+    el.innerHTML = `<div class="muted small">Processando ${i+1}/${files.length}: ${esc(files[i].name)}…</div>`;
+    try{
+      const xml = await files[i].text();
+      const r = await api('/api/admin?recurso=reprocessar-aprendizado',{method:'POST',body:JSON.stringify({xml})});
+      const rel = r.relatorio;
+      tot.f += rel.fornecedores_criados||0;
+      tot.m += rel.mapeamentos_criados||0;
+      tot.r += rel.mapeamentos_reforcados||0;
+      for(const it of rel.itens_pendentes||[]){
+        const k=`${it.cnpj_fornecedor}|${it.codigo_produto_nf||it.descricao}`;
+        if(!tot.pend[k]) tot.pend[k]={...it,ocorrencias:0};
+        tot.pend[k].ocorrencias+=(it.ocorrencias||1);
+      }
+    }catch(e){ tot.erros.push(`${files[i].name}: ${e.message}`); }
+  }
+  const pend = Object.values(tot.pend).sort((a,b)=>b.ocorrencias-a.ocorrencias);
+  let html=`<div class="prev"><b>${files.length} arquivo(s) processado(s)</b>
+    <div style="margin-top:4px">${tot.f} fornecedor(es) novo(s) salvo(s)</div>
+    <div>${tot.m} mapeamento(s) produto-fornecedor criado(s)</div>
+    <div>${tot.r} mapeamento(s) reforçado(s)</div>`;
+  if(pend.length) html+=`<div style="margin-top:8px;color:var(--warn)"><b>${pend.length}</b> item(s) sem produto reconhecido — adicione à esteira</div>
+    <div class="muted small" style="margin-top:2px">${pend.slice(0,6).map(it=>esc(it.descricao||it.codigo_produto_nf||'?')).join(' · ')}${pend.length>6?' …':''}</div>`;
+  if(tot.erros.length) html+=`<div style="margin-top:6px;color:var(--danger);font-size:12px">${tot.erros.map(e=>esc(e)).join('<br>')}</div>`;
+  html+='</div>';
+  el.innerHTML=html;
 }
 
 /* CONFERÊNCIA */

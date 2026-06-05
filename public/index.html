@@ -711,10 +711,13 @@ async function carregarXmlDeArquivo(){
   document.getElementById('xml-file-input').value = '';
 }
 
+let _xmlsParaEsteira = [];
+
 async function processarXmlLote(){
   const files = Array.from(document.getElementById('xml-lote-input').files);
   document.getElementById('xml-lote-input').value = '';
   if(!files.length) return;
+  _xmlsParaEsteira = [];
   const el = document.getElementById('reprocessar-result');
   const tot = {f:0, m:0, r:0, erros:[], pend:{}};
   for(let i=0; i<files.length; i++){
@@ -726,6 +729,7 @@ async function processarXmlLote(){
       tot.f += rel.fornecedores_criados||0;
       tot.m += rel.mapeamentos_criados||0;
       tot.r += rel.mapeamentos_reforcados||0;
+      if((rel.itens_pendentes||[]).length > 0) _xmlsParaEsteira.push({xml, nome:files[i].name});
       for(const it of rel.itens_pendentes||[]){
         const k=`${it.cnpj_fornecedor}|${it.codigo_produto_nf||it.descricao}`;
         if(!tot.pend[k]) tot.pend[k]={...it,ocorrencias:0};
@@ -738,11 +742,42 @@ async function processarXmlLote(){
     <div style="margin-top:4px">${tot.f} fornecedor(es) novo(s) salvo(s)</div>
     <div>${tot.m} mapeamento(s) produto-fornecedor criado(s)</div>
     <div>${tot.r} mapeamento(s) reforçado(s)</div>`;
-  if(pend.length) html+=`<div style="margin-top:8px;color:var(--warn)"><b>${pend.length}</b> item(s) sem produto reconhecido — adicione à esteira</div>
-    <div class="muted small" style="margin-top:2px">${pend.slice(0,6).map(it=>esc(it.descricao||it.codigo_produto_nf||'?')).join(' · ')}${pend.length>6?' …':''}</div>`;
+  if(pend.length){
+    html+=`<div style="margin-top:8px;color:var(--warn)"><b>${pend.length}</b> item(s) sem produto reconhecido</div>
+    <div class="muted small" style="margin-top:2px">${pend.slice(0,6).map(it=>esc(it.descricao||it.codigo_produto_nf||'?')).join(' · ')}${pend.length>6?' …':''}</div>
+    <button class="btn-2" style="width:100%;margin-top:10px;padding:11px;background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600" onclick="adicionarXmlsNaEsteira()">
+      ➕ Adicionar ${_xmlsParaEsteira.length} arquivo(s) à esteira de treinamento
+    </button>`;
+  }
   if(tot.erros.length) html+=`<div style="margin-top:6px;color:var(--danger);font-size:12px">${tot.erros.map(e=>esc(e)).join('<br>')}</div>`;
   html+='</div>';
   el.innerHTML=html;
+}
+
+async function adicionarXmlsNaEsteira(){
+  if(!_xmlsParaEsteira.length) return;
+  const el = document.getElementById('reprocessar-result');
+  const btn = el.querySelector('button');
+  if(btn){btn.disabled=true; btn.textContent='Adicionando…';}
+  let ok=0, dup=0, errs=[];
+  for(const item of _xmlsParaEsteira){
+    try{
+      await api('/api/admin?recurso=treino-fila-add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({xml:item.xml})});
+      ok++;
+    }catch(e){
+      if(e.message&&e.message.includes('já está na esteira')) dup++;
+      else errs.push(esc(item.nome)+': '+esc(e.message));
+    }
+  }
+  _xmlsParaEsteira=[];
+  let msg='<div class="prev">';
+  if(ok) msg+=`<div style="color:var(--ok)"><b>${ok}</b> arquivo(s) adicionado(s) à esteira ✓</div>`;
+  if(dup) msg+=`<div class="muted">${dup} já estava(m) na esteira (ignorado)</div>`;
+  if(errs.length) msg+=`<div style="color:var(--danger);font-size:12px">${errs.join('<br>')}</div>`;
+  msg+='</div>';
+  el.innerHTML=msg;
+  toast('Adicionado à esteira ✓ — agora gere o pacote para o ChatGPT.','ok');
+  await loadTreino();
 }
 
 /* CONFERÊNCIA */

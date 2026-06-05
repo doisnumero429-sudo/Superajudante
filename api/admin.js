@@ -834,7 +834,37 @@ async function auditoriaCadastro(req, res) {
 async function treinoFilaAdd(req, res) {
   if (req.method !== 'POST') return json(res, 405, { erro: 'POST only' });
   const b = await readBody(req);
-  const { chave, nota, fornecedor, itens = [] } = b;
+
+  let chave, nota, fornecedor, itens = [];
+  if (b.xml) {
+    // Aceita XML bruto direto (fluxo de upload em lote — evita chamada extra ao add-xml)
+    try {
+      const dados = parseNfe(b.xml);
+      chave = dados.nota.chave_nfe;
+      nota = dados.nota;
+      fornecedor = dados.fornecedor;
+      const cnpjFornXml = String(dados.fornecedor.cnpj || '').replace(/\D/g, '');
+      const [prods, pfRowsXml, aliasRowsXml] = await Promise.all([
+        readRows('Produtos'),
+        readRows('Produto_Fornecedor').catch(() => []),
+        readRows('Aliases_Produto').catch(() => []),
+      ]);
+      itens = dados.itens.map((it) => {
+        const result = encontrarProduto(it, { produtos: prods, pfRows: pfRowsXml, aliasRows: aliasRowsXml, cnpjForn: cnpjFornXml });
+        if (result) {
+          const fator = parseFloat(result.prod.fator_conversao) || it.fator_conversao;
+          const qe = it.quantidade_nf * fator;
+          return { ...it, id_produto: result.prod.id_produto, nome_interno: result.prod.nome_interno,
+            categoria_id: result.prod.categoria_id, unidade_estoque: result.prod.unidade_estoque,
+            fator_conversao: fator, quantidade_estoque: qe, produto_novo: false };
+        }
+        return { ...it, id_produto: '', nome_interno: '', categoria_id: '', produto_novo: true };
+      });
+    } catch (e) { return json(res, 400, { erro: 'Erro ao processar XML: ' + e.message }); }
+  } else {
+    ({ chave, nota, fornecedor, itens = [] } = b);
+  }
+
   if (!chave || !nota || !fornecedor) return json(res, 400, { erro: 'Dados incompletos.' });
 
   const agora = nowStr();

@@ -22,8 +22,9 @@
 //   recurso=auditoria-cadastro    GET  -> detecta inconsistencias (sem categoria, duplicados, sem embalagem)
 
 import { readRows, appendRow, updateRow, nextId, readConfig, deleteAllRows, deleteRow, deleteRowsWhere } from './_lib/db.js';
-import { normalizarDesc } from './_lib/parser.js';
+import { normalizarDesc, parseNfe } from './_lib/parser.js';
 import { entradaEstoque } from './_lib/estoque.js';
+import { encontrarProduto } from './_lib/reconhecimento.js';
 import { json, preflight, readBody, nowStr } from './_lib/util.js';
 
 const CONFIG_EDITAVEL = {
@@ -59,6 +60,7 @@ export default async function handler(req, res) {
     if (recurso === 'produto-inativar') return await produtoInativar(req, res);
     if (recurso === 'produto-reativar') return await produtoReativar(req, res);
     if (recurso === 'auditoria-cadastro') return await auditoriaCadastro(req, res);
+    if (recurso === 'reprocessar-aprendizado') return await reprocessarAprendizado(req, res);
     if (recurso === 'produto-historico') return await produtoHistorico(req, res);
     if (recurso === 'movimentacao-detalhe') return await movimentacaoDetalhe(req, res);
     return json(res, 400, { erro: 'Recurso invalido.' });
@@ -702,9 +704,11 @@ async function treinoImportar(req, res) {
 
 // ---------- AUDITORIA DO CADASTRO ----------
 async function auditoriaCadastro(req, res) {
-  const [produtos, cats, pfTodos, embs, aliases] = await Promise.all([
+  const [produtos, cats, pfTodos, embs, aliases, fornecedores, itensNota] = await Promise.all([
     readRows('Produtos'), readRows('Categorias'),
     readRows('Produto_Fornecedor'), readRows('Embalagens'), readRows('Aliases_Produto'),
+    readRows('Fornecedores').catch(() => []),
+    readRows('Itens_Nota').catch(() => []),
   ]);
 
   const catIds = new Set(cats.filter((c) => String(c.ativo || 'SIM').toUpperCase() === 'SIM').map((c) => c.id_categoria));
@@ -715,13 +719,13 @@ async function auditoriaCadastro(req, res) {
 
   const alertas = [];
 
-  // Produtos ativos sem categoria válida
+  // 1. Produtos ativos sem categoria válida
   for (const p of ativos) {
     if (!p.categoria_id || !catIds.has(p.categoria_id))
       alertas.push({ tipo: 'sem_categoria', id_produto: p.id_produto, nome_interno: p.nome_interno, detalhe: p.categoria_id || '' });
   }
 
-  // Produtos ativos sem nenhum mapeamento (CNPJ no próprio registro vazio e sem linha em Produto_Fornecedor)
+  // 2. Produtos ativos sem mapeamento fornecedor
   for (const p of ativos) {
     const temCnpjDireto = !!String(p.cnpj_fornecedor || '').replace(/\D/g, '');
     const temPf = pfTodos.some((pf) => pf.id_produto === p.id_produto && String(pf.ativo || 'SIM').toUpperCase() === 'SIM');
@@ -729,7 +733,7 @@ async function auditoriaCadastro(req, res) {
       alertas.push({ tipo: 'sem_mapeamento', id_produto: p.id_produto, nome_interno: p.nome_interno });
   }
 
-  // Conflito: mesmo CNPJ+código mapeado para dois produtos diferentes em Produto_Fornecedor
+  // 3. Conflito: mesmo CNPJ+código mapeado para dois produtos diferentes
   const chaveParaProd = {};
   for (const pf of pfTodos) {
     if (String(pf.ativo || 'SIM').toUpperCase() !== 'SIM') continue;
@@ -744,24 +748,66 @@ async function auditoriaCadastro(req, res) {
         nome_a: prodById[chaveParaProd[chave]]?.nome_interno || '',
         nome_b: prodById[pf.id_produto]?.nome_interno || '',
       });
-    } else {
-      chaveParaProd[chave] = pf.id_produto;
-    }
+    } else { chaveParaProd[chave] = pf.id_produto; }
   }
 
-  // Produtos ativos sem embalagem cadastrada
+  // 4. Produtos ativos sem embalagem
   for (const p of ativos) {
     if (!embs.some((e) => e.id_produto === p.id_produto && String(e.ativo || 'SIM').toUpperCase() === 'SIM'))
       alertas.push({ tipo: 'sem_embalagem', id_produto: p.id_produto, nome_interno: p.nome_interno });
   }
 
-  // Aliases apontando para produto inexistente ou inativo
+  // 5. Aliases apontando para produto inexistente ou inativo
   for (const a of aliases) {
     if (String(a.ativo || 'SIM').toUpperCase() !== 'SIM') continue;
     const prod = prodById[a.id_produto];
     if (!prod || String(prod.ativo || 'SIM').toUpperCase() !== 'SIM')
       alertas.push({ tipo: 'alias_produto_invalido', id_alias: a.id_alias, alias: a.alias, id_produto: a.id_produto });
   }
+
+  // 6. Fornecedores sem CNPJ
+  for (const f of fornecedores) {
+    if (String(f.ativo || 'SIM').toUpperCase() !== 'SIM') continue;
+    if (!String(f.cnpj || '').replace(/\D/g, ''))
+      alertas.push({ tipo: 'fornecedor_sem_cnpj', id_produto: f.id_fornecedor, nome_interno: f.razao_social || f.nome_fantasia || '—' });
+  }
+
+  // 7. Unidade suspeita (nome indica unidade diferente da cadastrada)
+  for (const p of ativos) {
+    const nome = normalizarDesc(p.nome_interno || p.descricao_original_nf || '');
+    const u = String(p.unidade_estoque || '').toUpperCase().replace(/\./g, '');
+    let motivo = null;
+    if (/\b(KILO|QUILOS?|KGS?)\b/.test(nome) && !['KG', 'G', 'GR'].includes(u))
+      motivo = `nome indica peso mas unidade é "${p.unidade_estoque}"`;
+    else if (/\b(LITROS?|LTS?)\b/.test(nome) && !['L', 'LT', 'ML'].includes(u))
+      motivo = `nome indica litro mas unidade é "${p.unidade_estoque}"`;
+    else if (/\b(ALFACE|RUCULA|COUVE|ESPINAFRE|REPOLHO|BROCOLIS|AGRIAO)\b/.test(nome) && u === 'UN')
+      motivo = 'hortifruti tipicamente controlado em KG';
+    else if (/\b(GARRAFA|FRASCO)\b/.test(nome) && ['KG', 'G', 'GR'].includes(u))
+      motivo = `embalagem líquida com unidade de peso "${p.unidade_estoque}"`;
+    if (motivo) alertas.push({ tipo: 'unidade_suspeita', id_produto: p.id_produto, nome_interno: p.nome_interno, detalhe: motivo });
+  }
+
+  // 8. Possíveis duplicados (nomes muito similares na mesma categoria)
+  const normGrupos = {};
+  for (const p of ativos) {
+    if (!p.nome_interno) continue;
+    const k = `${p.categoria_id || '__'}|${normalizarDesc(p.nome_interno).slice(0, 20)}`;
+    if (!normGrupos[k]) normGrupos[k] = [];
+    normGrupos[k].push(p);
+  }
+  for (const grupo of Object.values(normGrupos)) {
+    if (grupo.length < 2) continue;
+    alertas.push({
+      tipo: 'possivel_duplicado',
+      id_produto: grupo[0].id_produto, nome_interno: grupo[0].nome_interno,
+      nome_b: grupo.slice(1).map((p) => p.nome_interno).join(', '),
+      detalhe: `${grupo.length} produtos com nome muito similar`,
+    });
+  }
+
+  // 9. Itens de nota sem produto reconhecido (conta apenas)
+  const itensOrfaos = itensNota.filter((it) => !it.id_produto || String(it.id_produto).trim() === '').length;
 
   const stats = {
     total_produtos_ativos: ativos.length,
@@ -770,9 +816,13 @@ async function auditoriaCadastro(req, res) {
     sem_embalagem: alertas.filter((a) => a.tipo === 'sem_embalagem').length,
     cnpj_codigo_duplicado: alertas.filter((a) => a.tipo === 'cnpj_codigo_duplicado').length,
     alias_produto_invalido: alertas.filter((a) => a.tipo === 'alias_produto_invalido').length,
+    fornecedor_sem_cnpj: alertas.filter((a) => a.tipo === 'fornecedor_sem_cnpj').length,
+    unidade_suspeita: alertas.filter((a) => a.tipo === 'unidade_suspeita').length,
+    possivel_duplicado: alertas.filter((a) => a.tipo === 'possivel_duplicado').length,
+    itens_nota_sem_produto: itensOrfaos,
   };
 
-  return json(res, 200, { ok: true, stats, alertas });
+  return json(res, 200, { ok: true, stats, alertas, itens_nota_sem_produto: itensOrfaos });
 }
 
 // ---------- ESTEIRA DE TREINAMENTO: ADICIONAR NF-E ----------
@@ -785,11 +835,31 @@ async function treinoFilaAdd(req, res) {
   const agora = nowStr();
   const cnpjForn = String(fornecedor.cnpj || '').replace(/\D/g, '');
 
-  // Verifica duplicata na fila
-  let fila = [];
-  try { fila = await readRows('Treino_Fila'); } catch { /* tabela pode nao existir ainda */ }
+  // Verifica duplicata na fila e carrega fornecedores existentes em paralelo
+  let fila = [], fornecedoresDB = [];
+  try {
+    [fila, fornecedoresDB] = await Promise.all([
+      readRows('Treino_Fila').catch(() => []),
+      readRows('Fornecedores').catch(() => []),
+    ]);
+  } catch { /* ok */ }
   const jaExiste = fila.find((f) => String(f.chave_nfe).replace(/\D/g, '') === chave);
   if (jaExiste) return json(res, 409, { erro: 'Esta NF-e já está na esteira.', id_fila: jaExiste.id_fila });
+
+  // Garantir fornecedor no cadastro
+  if (cnpjForn && !fornecedoresDB.find((f) => String(f.cnpj).replace(/\D/g, '') === cnpjForn)) {
+    const fornId = await nextId('Fornecedores', 'id_fornecedor', 'FOR');
+    await appendRow('Fornecedores', {
+      id_fornecedor: fornId, razao_social: fornecedor.razao_social || '',
+      nome_fantasia: fornecedor.nome_fantasia || '', cnpj: cnpjForn,
+      inscricao_estadual: fornecedor.inscricao_estadual || '',
+      telefone: fornecedor.telefone || '', email: '',
+      endereco: fornecedor.endereco || '', numero: fornecedor.numero || '',
+      bairro: fornecedor.bairro || '', cidade: fornecedor.cidade || '',
+      estado: fornecedor.estado || '', cep: fornecedor.cep || '',
+      contato: '', observacoes: '', ativo: 'SIM',
+    });
+  }
 
   const totalRec = itens.filter((it) => !it.produto_novo).length;
   const totalDesc = itens.filter((it) => it.produto_novo).length;
@@ -836,6 +906,41 @@ async function treinoFilaAdd(req, res) {
       campos_pendentes: it.produto_novo ? JSON.stringify(['nome_interno', 'categoria']) : '[]',
       status_revisao: 'PENDENTE',
     });
+  }
+
+  // Criar vínculo produto_fornecedor para itens reconhecidos
+  const itensCom = itens.filter((it) => !it.produto_novo && it.id_produto && cnpjForn);
+  if (itensCom.length) {
+    let pfTodos = [];
+    try { pfTodos = await readRows('Produto_Fornecedor'); } catch { /* ok */ }
+    const pfSet = new Set(pfTodos.map((pf) =>
+      `${pf.id_produto}|${String(pf.cnpj_fornecedor).replace(/\D/g, '')}|${pf.codigo_produto_nf}`));
+    for (const it of itensCom) {
+      const codigo = String(it.codigo_produto_nf || '');
+      const chavePf = `${it.id_produto}|${cnpjForn}|${codigo}`;
+      if (pfSet.has(chavePf)) {
+        const ex = pfTodos.find((pf) =>
+          pf.id_produto === it.id_produto &&
+          String(pf.cnpj_fornecedor).replace(/\D/g, '') === cnpjForn &&
+          String(pf.codigo_produto_nf) === codigo);
+        if (ex) await updateRow('Produto_Fornecedor', ex.id_pf, {
+          ...ex, vezes_utilizado: (parseInt(ex.vezes_utilizado) || 0) + 1,
+          ultima_utilizacao: agora, atualizado_em: agora,
+        });
+      } else {
+        const id = await nextId('Produto_Fornecedor', 'id_pf', 'PF');
+        await appendRow('Produto_Fornecedor', {
+          id_pf: id, id_produto: it.id_produto, cnpj_fornecedor: cnpjForn,
+          nome_fornecedor: fornecedor.razao_social || '', codigo_produto_nf: codigo,
+          ean: it.codigo_barras || '', descricao_original: it.descricao_original || '',
+          descricao_normalizada: normalizarDesc(it.descricao_original || ''),
+          unidade_nf: it.unidade_nf || '', confirmado_pelo_usuario: 'SIM',
+          origem_confirmacao: 'ESTEIRA', vezes_utilizado: 1,
+          ultima_utilizacao: agora, ativo: 'SIM', criado_em: agora, atualizado_em: agora,
+        });
+        pfSet.add(chavePf);
+      }
+    }
   }
 
   return json(res, 200, {
@@ -893,6 +998,144 @@ async function treinoFilaListar(req, res) {
       produtos_agrupados: Object.keys(grupos).length,
     },
     desconhecidos_agrupados: Object.values(grupos),
+  });
+}
+
+/// ---------- REPROCESSAR NF-E PARA APRENDIZADO ----------
+// Relê XML de notas já importadas: garante fornecedor no cadastro, cria/reforça
+// vínculos produto_fornecedor e lista itens sem reconhecimento.
+// NÃO altera estoque, contas, custo médio ou nota fiscal.
+// Requer schema_fase6.sql executado no Supabase.
+async function reprocessarAprendizado(req, res) {
+  if (req.method !== 'POST') return json(res, 405, { erro: 'POST only' });
+  const b = await readBody(req);
+  const chaveReq = b.chave ? String(b.chave).replace(/\D/g, '') : null;
+  const agora = nowStr();
+
+  const notasFiscais = await readRows('Notas_Fiscais');
+  const notasParaProcessar = chaveReq
+    ? notasFiscais.filter((n) => String(n.chave_nfe).replace(/\D/g, '') === chaveReq)
+    : notasFiscais.filter((n) => String(n.xml_original || '').length > 100);
+
+  if (!notasParaProcessar.length) {
+    return json(res, 404, { erro: chaveReq ? 'NF-e não encontrada ou sem XML.' : 'Nenhuma nota com XML armazenado.' });
+  }
+
+  const [produtos, pfTodos, aliasRows, fornecedoresDB] = await Promise.all([
+    readRows('Produtos'), readRows('Produto_Fornecedor'),
+    readRows('Aliases_Produto'), readRows('Fornecedores').catch(() => []),
+  ]);
+
+  const fornPorCnpj = Object.fromEntries(fornecedoresDB.map((f) => [String(f.cnpj).replace(/\D/g, ''), f]));
+  const pfSet = new Set(pfTodos.map((pf) =>
+    `${pf.id_produto}|${String(pf.cnpj_fornecedor).replace(/\D/g, '')}|${pf.codigo_produto_nf}`));
+
+  const rel = {
+    notas_processadas: 0, notas_sem_xml: 0, notas_com_erro: [],
+    fornecedores_criados: 0, mapeamentos_criados: 0, mapeamentos_reforcados: 0,
+    itens_pendentes_raw: [],
+  };
+
+  for (const nota of notasParaProcessar) {
+    if (!nota.xml_original || nota.xml_original.length < 100) { rel.notas_sem_xml++; continue; }
+    let parsed;
+    try { parsed = parseNfe(nota.xml_original); } catch (e) {
+      rel.notas_com_erro.push({ numero: nota.numero_nota, erro: e.message }); continue;
+    }
+
+    const cnpjForn = parsed.fornecedor.cnpj;
+
+    // Garantir fornecedor
+    if (cnpjForn && !fornPorCnpj[cnpjForn]) {
+      const fornId = await nextId('Fornecedores', 'id_fornecedor', 'FOR');
+      await appendRow('Fornecedores', {
+        id_fornecedor: fornId, razao_social: parsed.fornecedor.razao_social,
+        nome_fantasia: parsed.fornecedor.nome_fantasia, cnpj: cnpjForn,
+        inscricao_estadual: parsed.fornecedor.inscricao_estadual,
+        telefone: parsed.fornecedor.telefone, email: '',
+        endereco: parsed.fornecedor.endereco, numero: parsed.fornecedor.numero,
+        bairro: parsed.fornecedor.bairro, cidade: parsed.fornecedor.cidade,
+        estado: parsed.fornecedor.estado, cep: parsed.fornecedor.cep,
+        contato: '', observacoes: '', ativo: 'SIM',
+      });
+      fornPorCnpj[cnpjForn] = { cnpj: cnpjForn, razao_social: parsed.fornecedor.razao_social };
+      rel.fornecedores_criados++;
+    }
+
+    // Processar itens
+    for (const it of parsed.itens) {
+      const result = encontrarProduto(it, { produtos, pfRows: pfTodos, aliasRows, cnpjForn });
+      if (!result) {
+        rel.itens_pendentes_raw.push({
+          nota_numero: nota.numero_nota, descricao: it.descricao_original,
+          codigo_produto_nf: it.codigo_produto_nf, ean: it.codigo_barras,
+          ncm: it.ncm, cnpj_fornecedor: cnpjForn,
+          fornecedor: parsed.fornecedor.razao_social,
+        });
+        continue;
+      }
+
+      const codigo = String(it.codigo_produto_nf || '');
+      const chavePf = `${result.prod.id_produto}|${cnpjForn}|${codigo}`;
+
+      if (pfSet.has(chavePf)) {
+        const ex = pfTodos.find((pf) =>
+          pf.id_produto === result.prod.id_produto &&
+          String(pf.cnpj_fornecedor).replace(/\D/g, '') === cnpjForn &&
+          String(pf.codigo_produto_nf) === codigo);
+        if (ex) {
+          await updateRow('Produto_Fornecedor', ex.id_pf, {
+            ...ex,
+            vezes_utilizado: (parseInt(ex.vezes_utilizado) || 0) + 1,
+            ultima_utilizacao: agora,
+            ultimo_preco_unitario: it.custo_unitario_estoque || ex.ultimo_preco_unitario || 0,
+            ncm: it.ncm || ex.ncm || '',
+            atualizado_em: agora,
+          });
+          rel.mapeamentos_reforcados++;
+        }
+      } else {
+        const id = await nextId('Produto_Fornecedor', 'id_pf', 'PF');
+        const novo = {
+          id_pf: id, id_produto: result.prod.id_produto, cnpj_fornecedor: cnpjForn,
+          nome_fornecedor: parsed.fornecedor.razao_social, codigo_produto_nf: codigo,
+          ean: it.codigo_barras || '', descricao_original: it.descricao_original || '',
+          descricao_normalizada: normalizarDesc(it.descricao_original || ''),
+          unidade_nf: it.unidade_nf || '', ncm: it.ncm || '',
+          ultimo_preco_unitario: it.custo_unitario_estoque || 0,
+          confirmado_pelo_usuario: 'SIM', origem_confirmacao: 'REPROCESSAMENTO',
+          vezes_utilizado: 1, ultima_utilizacao: agora, ativo: 'SIM',
+          criado_em: agora, atualizado_em: agora,
+        };
+        await appendRow('Produto_Fornecedor', novo);
+        pfTodos.push(novo);
+        pfSet.add(chavePf);
+        rel.mapeamentos_criados++;
+      }
+    }
+
+    rel.notas_processadas++;
+  }
+
+  // Agrupa pendentes por fornecedor+código
+  const pendentesMap = {};
+  for (const it of rel.itens_pendentes_raw) {
+    const k = `${it.cnpj_fornecedor}|${it.codigo_produto_nf || it.descricao}`;
+    if (!pendentesMap[k]) pendentesMap[k] = { ...it, ocorrencias: 0 };
+    pendentesMap[k].ocorrencias++;
+  }
+
+  return json(res, 200, {
+    ok: true,
+    relatorio: {
+      notas_processadas: rel.notas_processadas,
+      notas_sem_xml: rel.notas_sem_xml,
+      notas_com_erro: rel.notas_com_erro,
+      fornecedores_criados: rel.fornecedores_criados,
+      mapeamentos_criados: rel.mapeamentos_criados,
+      mapeamentos_reforcados: rel.mapeamentos_reforcados,
+      itens_pendentes: Object.values(pendentesMap).sort((a, b) => b.ocorrencias - a.ocorrencias),
+    },
   });
 }
 
@@ -964,8 +1207,8 @@ async function treinoFilaPacote(req, res) {
     produtos_confirmados_amostra: ativos
       .filter((p) => String(p.confirmado || 'NAO').toUpperCase() === 'SIM')
       .sort((a, b) => (a.nome_interno || '').localeCompare(b.nome_interno || '', 'pt-BR'))
-      .slice(0, 40)
-      .map((p) => ({ nome_interno: p.nome_interno, categoria_id: p.categoria_id, subcategoria: p.subcategoria || '', unidade_estoque: p.unidade_estoque })),
+      .slice(0, 200)
+      .map((p) => ({ nome_interno: p.nome_interno, categoria_id: p.categoria_id, subcategoria: p.subcategoria || '', unidade_estoque: p.unidade_estoque, custo_medio: parseFloat(p.custo_medio || 0) })),
     fornecedores: fornecedores
       .sort((a, b) => (a.razao_social || '').localeCompare(b.razao_social || '', 'pt-BR'))
       .map((f) => ({ cnpj: f.cnpj, razao_social: f.razao_social })),

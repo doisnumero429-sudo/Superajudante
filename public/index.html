@@ -438,6 +438,15 @@ hr{border:none;border-top:1px solid var(--line);margin:16px 0}
     <div id="treino-est-result" style="margin-top:10px"></div>
   </div>
 
+  <!-- Reprocessamento para Aprendizado -->
+  <div class="sec-title">Reprocessar para Aprendizado</div>
+  <div class="card">
+    <p class="muted small" style="margin-bottom:10px">Relê o XML das notas já importadas, garante fornecedores no cadastro e reforça os mapeamentos produto-fornecedor. <b>Não altera estoque.</b></p>
+    <p class="muted small" style="margin-bottom:12px;color:var(--warn)">⚠ Requer schema_fase6.sql executado no Supabase antes de usar pela 1ª vez.</p>
+    <button class="btn-2" style="width:100%;padding:12px" onclick="reprocessarTodasNotas()">🔄 Reprocessar todas as notas para aprendizado</button>
+    <div id="reprocessar-result" style="margin-top:10px"></div>
+  </div>
+
   <!-- Controles avançados -->
   <div class="sec-title">Controles</div>
   <div class="card">
@@ -1912,6 +1921,30 @@ function rotuloConfig(k){
     INTERVALO_TENTATIVAS_MS:'Intervalo entre tentativas (ms)',LIMITE_CONSULTAS_SEGUNDO:'Consultas por segundo',
     LIMITE_SEMANAL_COMPRAS:'Limite semanal de compras (R$)'}[k]||k;
 }
+async function reprocessarTodasNotas(){
+  const el = document.getElementById('reprocessar-result');
+  el.innerHTML = '<div class="muted small">Reprocessando… pode demorar alguns segundos.</div>';
+  try{
+    const r = await api('/api/admin?recurso=reprocessar-aprendizado', {method:'POST', body: JSON.stringify({todas:true})});
+    const rel = r.relatorio;
+    let html = `<div class="prev">
+      <div><b>${rel.notas_processadas}</b> nota(s) processada(s)</div>
+      <div><b>${rel.fornecedores_criados}</b> fornecedor(es) salvo(s) no cadastro</div>
+      <div><b>${rel.mapeamentos_criados}</b> mapeamento(s) produto-fornecedor criado(s)</div>
+      <div><b>${rel.mapeamentos_reforcados}</b> mapeamento(s) reforçado(s) com novo preço/NCM</div>`;
+    if(rel.notas_sem_xml>0) html+=`<div class="muted" style="margin-top:4px">${rel.notas_sem_xml} nota(s) sem XML armazenado (ignoradas)</div>`;
+    if(rel.itens_pendentes&&rel.itens_pendentes.length){
+      html+=`<div style="margin-top:8px;color:var(--warn)"><b>${rel.itens_pendentes.length}</b> item(s) único(s) sem produto reconhecido — adicione à esteira de treinamento</div>`;
+      const top=rel.itens_pendentes.slice(0,6);
+      html+=`<div class="muted small" style="margin-top:4px">${top.map(it=>esc(it.descricao)).join(' · ')}${rel.itens_pendentes.length>6?' …':''}</div>`;
+    }
+    if(rel.notas_com_erro&&rel.notas_com_erro.length)
+      html+=`<div style="margin-top:6px;color:var(--danger)">${rel.notas_com_erro.length} nota(s) com erro de XML: ${rel.notas_com_erro.map(n=>esc(n.numero)).join(', ')}</div>`;
+    html+='</div>';
+    el.innerHTML=html;
+  }catch(e){ el.innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
+}
+
 async function loadAuditoria(){
   const el = document.getElementById('auditoria-content');
   el.innerHTML = '<div class="muted small">Analisando…</div>';
@@ -1919,22 +1952,32 @@ async function loadAuditoria(){
     const r = await api('/api/admin?recurso=auditoria-cadastro');
     const s = r.stats;
     const tipoBadge = {
-      sem_categoria: '<span class="badge b-err">sem categoria</span>',
-      sem_mapeamento: '<span class="badge b-wait">sem mapeamento</span>',
-      sem_embalagem: '<span class="badge b-wait">sem embalagem</span>',
+      sem_categoria:         '<span class="badge b-err">sem categoria</span>',
+      sem_mapeamento:        '<span class="badge b-wait">sem mapeamento</span>',
+      sem_embalagem:         '<span class="badge b-wait">sem embalagem</span>',
       cnpj_codigo_duplicado: '<span class="badge b-err">CNPJ+cód duplicado</span>',
-      alias_produto_invalido: '<span class="badge b-err">alias órfão</span>',
+      alias_produto_invalido:'<span class="badge b-err">alias órfão</span>',
+      fornecedor_sem_cnpj:   '<span class="badge b-warn">fornecedor sem CNPJ</span>',
+      unidade_suspeita:      '<span class="badge b-warn">unidade suspeita</span>',
+      possivel_duplicado:    '<span class="badge b-wait">possível duplicado</span>',
     };
     const statsHtml = `<div class="row" style="flex-wrap:wrap;gap:8px;margin-bottom:14px">
       <div class="stat ${s.sem_categoria>0?'alert':'good'}"><div class="n">${s.sem_categoria}</div><div class="l">sem categoria</div></div>
       <div class="stat ${s.sem_mapeamento>0?'warn':'good'}"><div class="n">${s.sem_mapeamento}</div><div class="l">sem mapeamento</div></div>
       <div class="stat ${s.sem_embalagem>0?'warn':'good'}"><div class="n">${s.sem_embalagem}</div><div class="l">sem embalagem</div></div>
       <div class="stat ${s.cnpj_codigo_duplicado>0?'alert':'good'}"><div class="n">${s.cnpj_codigo_duplicado}</div><div class="l">CNPJ+cód dup.</div></div>
-      <div class="stat ${s.alias_produto_invalido>0?'warn':'good'}"><div class="n">${s.alias_produto_invalido}</div><div class="l">alias órfão</div></div>
+      <div class="stat ${s.unidade_suspeita>0?'warn':'good'}"><div class="n">${s.unidade_suspeita||0}</div><div class="l">unid. suspeita</div></div>
+      <div class="stat ${s.possivel_duplicado>0?'warn':'good'}"><div class="n">${s.possivel_duplicado||0}</div><div class="l">poss. duplicado</div></div>
+      <div class="stat ${s.fornecedor_sem_cnpj>0?'warn':'good'}"><div class="n">${s.fornecedor_sem_cnpj||0}</div><div class="l">forn. sem CNPJ</div></div>
+      <div class="stat ${s.itens_nota_sem_produto>0?'warn':'good'}"><div class="n">${r.itens_nota_sem_produto||0}</div><div class="l">itens s/ produto</div></div>
     </div>`;
     const alertasHtml = r.alertas.length
-      ? r.alertas.map(a=>`<div class="list-row"><div><div class="t">${tipoBadge[a.tipo]||a.tipo} ${esc(a.nome_interno||a.nome_a||a.alias||'')}</div>
-          <div class="s">${esc(a.detalhe||a.motivo||a.chave_duplicada||'')}</div></div></div>`).join('')
+      ? r.alertas.map(a=>{
+          const badge=tipoBadge[a.tipo]||`<span class="badge b-wait">${esc(a.tipo)}</span>`;
+          const nome=esc(a.nome_interno||a.nome_a||a.alias||'');
+          const det=esc(a.detalhe||a.nome_b||a.chave_duplicada||'');
+          return `<div class="list-row"><div><div class="t">${badge} ${nome}</div>${det?`<div class="s">${det}</div>`:''}</div></div>`;
+        }).join('')
       : '<div class="muted small">Nenhuma inconsistência encontrada ✓</div>';
     el.innerHTML = `<p class="muted small" style="margin-bottom:10px">${s.total_produtos_ativos} produtos ativos analisados.</p>${statsHtml}<div>${alertasHtml}</div>`;
   }catch(e){ el.innerHTML=`<div class="empty">${e.message}</div>`; }

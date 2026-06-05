@@ -588,6 +588,7 @@ async function treinoImportar(req, res) {
         ...alvo, nome_interno: nome || alvo.nome_interno,
         categoria_id: categoriaId || alvo.categoria_id,
         subcategoria: p.subcategoria || alvo.subcategoria || '',
+        variante: p.variante || alvo.variante || '',
         unidade_estoque: unidade || alvo.unidade_estoque,
         // Preenche cnpj_fornecedor e codigo_produto_nf somente se ainda estiverem vazios
         cnpj_fornecedor: String(alvo.cnpj_fornecedor || '').replace(/\D/g, '') || cnpj || '',
@@ -603,6 +604,7 @@ async function treinoImportar(req, res) {
         codigo_barras: p.ean || '', descricao_original_nf: p.descricao_original_nfe || nome,
         nome_interno: nome, categoria_id: categoriaId,
         subcategoria: p.subcategoria || '',
+        variante: p.variante || '',
         fornecedor_principal_id: '',
         unidade_compra: p.unidade_nfe || unidade, unidade_estoque: unidade,
         quantidade_por_embalagem: 1, fator_conversao: 1,
@@ -1217,7 +1219,7 @@ async function treinoFilaPacote(req, res) {
       .filter((p) => String(p.confirmado || 'NAO').toUpperCase() === 'SIM')
       .sort((a, b) => (a.nome_interno || '').localeCompare(b.nome_interno || '', 'pt-BR'))
       .slice(0, 200)
-      .map((p) => ({ nome_interno: p.nome_interno, categoria_id: p.categoria_id, subcategoria: p.subcategoria || '', unidade_estoque: p.unidade_estoque, custo_medio: parseFloat(p.custo_medio || 0) })),
+      .map((p) => ({ nome_interno: p.nome_interno, categoria_id: p.categoria_id, subcategoria: p.subcategoria || '', variante: p.variante || '', unidade_estoque: p.unidade_estoque, custo_medio: parseFloat(p.custo_medio || 0) })),
     fornecedores: fornecedores
       .sort((a, b) => (a.razao_social || '').localeCompare(b.razao_social || '', 'pt-BR'))
       .map((f) => ({ cnpj: f.cnpj, razao_social: f.razao_social })),

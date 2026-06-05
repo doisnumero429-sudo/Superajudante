@@ -2196,7 +2196,8 @@ function montarTextoPacote(pacote){
     ?amostra.map(p=>{
         const catNome=cats.find(c=>c.id_categoria===p.categoria_id)?.nome_categoria||'';
         const sub=p.subcategoria?` > ${p.subcategoria}`:'';
-        return`  • ${p.nome_interno} [${catNome}${sub}] (${p.unidade_estoque})`;
+        const vari=p.variante?` > ${p.variante}`:'';
+        return`  • ${p.nome_interno} [${catNome}${sub}${vari}] (${p.unidade_estoque})`;
       }).join('\n')
     :'  (nenhum produto confirmado ainda — seja conservador com a nomenclatura)';
 
@@ -2321,9 +2322,10 @@ function montarTextoPacote(pacote){
         descricao_original_nfe:'DESCRICAO COMO VEIO NA NF-e',
         categoria:'Nome da categoria existente',
         subcategoria:'Nome da subcategoria (existente ou nova)',
+        variante:'Garrafa 600ml | Lata 350ml | null (obrigatorio para bebidas)',
         unidade_estoque:'KG|UN|L|ML',
-        cnpj_fornecedor:'00000000000000',
-        codigo_produto_nf:'codigo',
+        cnpj_fornecedor:'00000000000000 (copiar dos dados de entrada — nao omitir)',
+        codigo_produto_nf:'codigo (copiar dos dados de entrada — nao omitir)',
         ean:'codigo de barras (se souber)',
         confianca:'ALTA|MEDIA|BAIXA',
         confianca_motivo:'Explique brevemente',

@@ -615,6 +615,14 @@ async function treinoImportar(req, res) {
       });
       relatorio.produtos_atualizados += 1;
       registrarIdPorChave(idPorChave, p, alvo.id_produto);
+
+      // Cria embalagem base se o produto atualizado ainda nao tiver nenhuma
+      const jaTemEmb = embsTodas.some((e) => e.id_produto === alvo.id_produto && String(e.ativo || 'SIM').toUpperCase() === 'SIM');
+      if (!jaTemEmb) {
+        const u = String(alvo.unidade_estoque || unidade || 'UN').toUpperCase();
+        await garantirEmbalagem(alvo.id_produto, { fator: 1, sigla: u, unidade_base: u, descricao: `${u} x1` }, embsTodas);
+        relatorio.embalagens_criadas += 1;
+      }
     } else {
       const id = genPrd();
       const novo = {

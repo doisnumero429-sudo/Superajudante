@@ -104,6 +104,7 @@ export default async function handler(req, res) {
     }
 
     // 3) Itens: cadastra produtos novos, lanca item, movimentacao e atualiza estoque
+    const novosParaEsteira = []; // produtos criados nesta confirmacao (para enfileirar no GPT)
     for (const it of itens) {
       // Usa encontrarProduto (7 estrategias) para localizar o produto
       let prod = null;
@@ -180,6 +181,24 @@ export default async function handler(req, res) {
           codigo_produto_nf: it.codigo_produto_nf, codigo_barras: it.codigo_barras,
           estoque_atual: qtdEstoque, custo_medio: custoUnit,
         });
+
+        // Cria embalagem base (fator=1) para o produto recém-cadastrado
+        const unidadeEst = String(it.unidade_estoque || 'UN').toUpperCase();
+        const embId = await nextId('Embalagens', 'id_embalagem', 'EMB');
+        await appendRow('Embalagens', {
+          id_embalagem: embId,
+          id_produto: idProduto,
+          descricao: `${unidadeEst} x1`,
+          sigla: unidadeEst,
+          fator: 1,
+          unidade_base: unidadeEst,
+          permite_entrada: 'SIM', permite_saida: 'SIM', permite_inventario: 'SIM',
+          padrao_entrada: 'NAO', padrao_saida: 'NAO', padrao_inventario: 'NAO',
+          ativo: 'SIM', criado_em: agora, atualizado_em: agora,
+        });
+
+        // Marca para enfileirar na esteira do GPT
+        novosParaEsteira.push({ it, idProduto, nomeInterno: it.nome_interno || it.descricao_original });
       }
 
       // Item da nota
@@ -279,12 +298,72 @@ export default async function handler(req, res) {
       });
     }
 
+    // 5) Auto-enfileira novos produtos na esteira do GPT (Treino_Fila + Treino_Itens)
+    if (novosParaEsteira.length > 0) {
+      try {
+        let filaExist = [];
+        try { filaExist = await readRows('Treino_Fila'); } catch { /* ok */ }
+        const jaNaFila = filaExist.find((f) => String(f.chave_nfe).replace(/\D/g, '') === chave);
+
+        let idFila;
+        if (jaNaFila) {
+          idFila = jaNaFila.id_fila;
+        } else {
+          idFila = await nextId('Treino_Fila', 'id_fila', 'TF');
+          await appendRow('Treino_Fila', {
+            id_fila: idFila,
+            chave_nfe: chave,
+            numero_nota: nota.numero_nota || '',
+            data_emissao: nota.data_emissao || '',
+            cnpj_fornecedor: cnpjForn,
+            nome_fornecedor: fornecedor.razao_social || '',
+            status: 'OK',
+            criado_em: agora,
+            processado_em: agora,
+            total_itens: novosParaEsteira.length,
+            total_reconhecidos: 0,
+            total_desconhecidos: novosParaEsteira.length,
+            total_duvidas: 0,
+            erro: '',
+          });
+        }
+
+        for (const { it, idProduto, nomeInterno } of novosParaEsteira) {
+          const idItemFila = await nextId('Treino_Itens', 'id_item_fila', 'TI');
+          await appendRow('Treino_Itens', {
+            id_item_fila: idItemFila,
+            id_fila: idFila,
+            chave_nfe: chave,
+            cnpj_fornecedor: cnpjForn,
+            nome_fornecedor: fornecedor.razao_social || '',
+            codigo_produto_nf: it.codigo_produto_nf || '',
+            ean: it.codigo_barras || '',
+            descricao_original_nfe: it.descricao_original || '',
+            descricao_normalizada: normalizarDesc(it.descricao_original || ''),
+            unidade_nfe: it.unidade_nf || '',
+            quantidade_nfe: it.quantidade_nf || 0,
+            valor_total: it.valor_total_nf || 0,
+            valor_unitario_nfe: it.valor_unitario_nf || 0,
+            data_emissao: nota.data_emissao || '',
+            produto_reconhecido: false,
+            id_produto_reconhecido: idProduto,
+            nome_interno_sugerido: nomeInterno,
+            produto_novo: true,
+            campos_pendentes: JSON.stringify(['embalagem']),
+            status_revisao: 'PENDENTE',
+          });
+        }
+      } catch { /* esteira opcional — nao bloqueia a confirmacao */ }
+    }
+
     return json(res, 200, {
       ok: true,
       id_nota: idNota,
       fornecedor_id: fornecedorId,
       itens_lancados: itens.length,
       parcelas_criadas: parcelas.length,
+      embalagens_criadas: novosParaEsteira.length,
+      enfileirados_gpt: novosParaEsteira.length,
     });
   } catch (e) {
     return json(res, 500, { erro: e.message });
